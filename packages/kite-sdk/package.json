@@ -9,6 +9,10 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "gokite-aa-sdk": "^1.0.0",
+    "ethers": "^6.13.0"
+  },
   "devDependencies": {
     "typescript": "^5.7.0"
   }
