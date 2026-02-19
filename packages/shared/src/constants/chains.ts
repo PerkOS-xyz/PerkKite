@@ -8,13 +8,13 @@ export const KITE_CHAIN = {
     decimals: 18,
   },
   rpcUrls: {
-    default: { http: ['https://rpc.testnet.gokite.ai'] },
-    public: { http: ['https://rpc.testnet.gokite.ai'] },
+    default: { http: ['https://rpc-testnet.gokite.ai'] },
+    public: { http: ['https://rpc-testnet.gokite.ai'] },
   },
   blockExplorers: {
-    default: { name: 'Kite Explorer', url: 'https://explorer.testnet.gokite.ai' },
+    default: { name: 'Kite Explorer', url: 'https://testnet.kitescan.ai' },
   },
   testnet: true,
 } as const;
 
-export const USDC_ADDRESS = '0x0000000000000000000000000000000000000000'; // Placeholder
+export const USDC_ADDRESS = '0x0fF5393387ad2f9f691FD6Fd28e07E3969e27e63';

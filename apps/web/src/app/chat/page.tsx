@@ -1,82 +1,231 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+interface ActionLog {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
+  timestamp: string;
+  txHash?: string;
+  explorerUrl?: string;
+}
 
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  actions?: ActionLog[];
 }
 
-const SYSTEM_PROMPTS: Record<string, string> = {
-  'defi-trader': `You are a DeFi Trading Agent powered by Kite Agent Passport. You specialize in:
-- Yield optimization and farming strategies
-- Token swaps and DEX aggregation
-- Portfolio tracking and rebalancing
-- Gas optimization for transactions
+interface AgentInfo {
+  agentId: string;
+  payerAddress: string | null;
+  authenticated: boolean;
+  tools: { name: string; description: string }[];
+  toolCount: number;
+  chain: string;
+  mcpServer: string;
+}
 
-You can make x402 payments on behalf of the user within their spending limits. When asked to perform actions that require payment, acknowledge the x402 protocol and spending rules.
-
-Be helpful, concise, and knowledgeable about DeFi protocols on Kite Chain and other networks.`,
-
-  'nft-collector': `You are an NFT Collector Agent powered by Kite Agent Passport. You specialize in:
-- Floor price tracking across marketplaces
-- Rarity analysis and trait evaluation
-- Marketplace navigation (OpenSea, Blur, etc.)
-- Portfolio valuation
-
-You can make x402 payments for NFT-related services. Be enthusiastic about NFTs but also practical about investments.`,
-
-  'research-analyst': `You are a Research Analyst Agent powered by Kite Agent Passport. You specialize in:
-- Protocol documentation analysis
-- Tokenomics evaluation
-- Market research and trends
-- Whitepaper summarization
-
-You provide thorough, well-researched answers. When making claims, be specific about sources and confidence levels.`,
-
-  'security-auditor': `You are a Security Auditor Agent powered by Kite Agent Passport. You specialize in:
-- Smart contract analysis
-- Rug pull detection patterns
-- Risk assessment scoring
-- Audit report interpretation
-
-You are cautious and thorough. Always highlight potential risks and never give financial advice. When in doubt, recommend professional audits.`,
-
-  'social-manager': `You are a Social Manager Agent powered by Kite Agent Passport. You specialize in:
-- Twitter/X monitoring and engagement
-- Farcaster integration
-- Community management strategies
-- Content drafting and scheduling
-
-You understand crypto culture and can help craft engaging social content while maintaining professionalism.`,
-
-  'dao-delegate': `You are a DAO Delegate Agent powered by Kite Agent Passport. You specialize in:
-- Governance proposal analysis
-- Voting pattern tracking
-- Delegate comparison
-- Deadline monitoring
-
-You help users stay informed about governance across multiple DAOs and make informed voting decisions.`,
-
-  'default': `You are a Kite Agent powered by Kite Agent Passport. You can help users with various tasks and make x402 payments on their behalf within configured spending limits.
-
-You are helpful, knowledgeable about Web3 and crypto, and always transparent about your capabilities and limitations.`
+const TEMPLATE_CONFIG: Record<string, { icon: string; name: string; systemPrompt: string }> = {
+  'defi-trader': {
+    icon: '📈',
+    name: 'DeFi Trader',
+    systemPrompt: `You are a DeFi Trading Agent powered by Kite Agent Passport. You specialize in yield optimization, token swaps, DEX aggregation, portfolio tracking, and gas optimization. You can make x402 payments on behalf of the user within their spending limits. Be helpful, concise, and knowledgeable about DeFi protocols.`,
+  },
+  'nft-collector': {
+    icon: '🖼️',
+    name: 'NFT Collector',
+    systemPrompt: `You are an NFT Collector Agent powered by Kite Agent Passport. You specialize in floor price tracking, rarity analysis, marketplace navigation, and portfolio valuation. You can make x402 payments for NFT-related services.`,
+  },
+  'research-analyst': {
+    icon: '🔬',
+    name: 'Research Analyst',
+    systemPrompt: `You are a Research Analyst Agent powered by Kite Agent Passport. You specialize in protocol documentation analysis, tokenomics evaluation, market research, and whitepaper summarization. You provide thorough, well-researched answers.`,
+  },
+  'security-auditor': {
+    icon: '🛡️',
+    name: 'Security Auditor',
+    systemPrompt: `You are a Security Auditor Agent powered by Kite Agent Passport. You specialize in smart contract analysis, rug pull detection, risk assessment, and audit report interpretation. You are cautious and thorough.`,
+  },
+  'social-manager': {
+    icon: '📱',
+    name: 'Social Manager',
+    systemPrompt: `You are a Social Manager Agent powered by Kite Agent Passport. You specialize in Twitter/X monitoring, Farcaster integration, community management, and content drafting.`,
+  },
+  'dao-delegate': {
+    icon: '🏛️',
+    name: 'DAO Delegate',
+    systemPrompt: `You are a DAO Delegate Agent powered by Kite Agent Passport. You specialize in governance proposal analysis, voting pattern tracking, delegate comparison, and deadline monitoring.`,
+  },
+  'default': {
+    icon: '🤖',
+    name: 'Kite Agent',
+    systemPrompt: `You are a Kite Agent powered by Kite Agent Passport. You can help users with various tasks and make x402 payments on their behalf within configured spending limits. You are helpful, knowledgeable about Web3 and crypto, and always transparent about your capabilities.`,
+  },
 };
+
+function ActionCard({ action }: { action: ActionLog }) {
+  const isPayment = action.tool === 'approve_payment' || action.tool === 'pay_for_service';
+  const isIdentity = action.tool === 'get_agent_identity';
+  const result = action.result as Record<string, unknown>;
+
+  return (
+    <div className={`border rounded-lg p-3 text-xs ${
+      isPayment ? 'border-green-700 bg-green-900/20' :
+      isIdentity ? 'border-purple-700 bg-purple-900/20' :
+      'border-gray-700 bg-gray-800/50'
+    }`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`w-2 h-2 rounded-full ${
+          isPayment ? 'bg-green-400' : isIdentity ? 'bg-purple-400' : 'bg-blue-400'
+        }`} />
+        <span className="font-medium text-gray-300">
+          {isPayment ? 'x402 Payment' :
+           isIdentity ? 'Identity Verification' :
+           action.tool.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+        </span>
+        {!!(result as Record<string, unknown>)?.gasless && (
+          <span className="px-1.5 py-0.5 bg-kite-primary/20 text-kite-secondary rounded text-[10px]">
+            Gasless
+          </span>
+        )}
+      </div>
+
+      {isPayment && (
+        <div className="space-y-1 text-gray-400">
+          {!!result?.amount && <div>Amount: <span className="text-white">{String(result.amount)}</span></div>}
+          {!!result?.service && <div>Service: <span className="text-white">{String(result.service)}</span></div>}
+          {!!result?.recipient && (
+            <div>To: <span className="font-mono text-white">{String(result.recipient).slice(0, 10)}...{String(result.recipient).slice(-6)}</span></div>
+          )}
+          {!!result?.x402Flow && (
+            <div className="mt-2 space-y-0.5 text-[10px]">
+              {Object.values(result.x402Flow as Record<string, string>).map((step, i) => (
+                <div key={i} className="flex items-start gap-1">
+                  <span className="text-green-400 shrink-0">Step {i + 1}:</span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isIdentity && (
+        <div className="space-y-1 text-gray-400">
+          {!!result?.payerAddress && (
+            <div>Address: <span className="font-mono text-white">{String(result.payerAddress).slice(0, 10)}...{String(result.payerAddress).slice(-6)}</span></div>
+          )}
+          <div>Chain: <span className="text-white">{String(result?.chain || 'Kite Testnet')}</span></div>
+          <div>Authenticated: <span className={result?.authenticated ? 'text-green-400' : 'text-red-400'}>{result?.authenticated ? 'Yes' : 'No'}</span></div>
+        </div>
+      )}
+
+      {!isPayment && !isIdentity && !!result?.tools && (
+        <div className="text-gray-400">
+          Tools: <span className="text-white">{String((result.tools as unknown[]).length)} available</span>
+        </div>
+      )}
+
+      {action.txHash && action.txHash !== 'simulated' && action.txHash !== 'pending' && (
+        <div className="mt-2 pt-2 border-t border-gray-700">
+          <a
+            href={action.explorerUrl || `https://testnet.kitescan.ai/tx/${action.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-kite-secondary hover:text-kite-primary transition flex items-center gap-1"
+          >
+            View on Explorer →
+            <span className="font-mono">{action.txHash.slice(0, 10)}...</span>
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentHeader({
+  templateConfig,
+  agentInfo,
+  agentId,
+  onBack,
+}: {
+  templateConfig: { icon: string; name: string };
+  agentInfo: AgentInfo | null;
+  agentId: string | null;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-4 p-4 border-b border-gray-800">
+      <button onClick={onBack} className="text-gray-400 hover:text-white transition">
+        ← Back
+      </button>
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-kite-primary/20 rounded-full flex items-center justify-center text-xl">
+          {templateConfig.icon}
+        </div>
+        <div>
+          <h1 className="font-semibold">{templateConfig.name} Agent</h1>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-gray-500">Kite Agent Passport</p>
+            {agentInfo?.authenticated ? (
+              <span className="flex items-center gap-1 text-[10px] text-green-400 bg-green-900/30 px-1.5 py-0.5 rounded">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+                Verified
+              </span>
+            ) : agentId ? (
+              <span className="flex items-center gap-1 text-[10px] text-yellow-400 bg-yellow-900/30 px-1.5 py-0.5 rounded">
+                <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full" />
+                Connecting
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
+                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full" />
+                No Agent
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="ml-auto text-right">
+        {agentInfo?.payerAddress && (
+          <a
+            href={`https://testnet.kitescan.ai/address/${agentInfo.payerAddress}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-mono text-gray-400 hover:text-kite-secondary transition"
+          >
+            {agentInfo.payerAddress.slice(0, 6)}...{agentInfo.payerAddress.slice(-4)}
+          </a>
+        )}
+        {agentInfo && (
+          <p className="text-[10px] text-gray-600">{agentInfo.toolCount} MCP tools</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const template = searchParams.get('template') || 'default';
+  const agentIdParam = searchParams.get('agent') || null;
   const { isConnected, address } = useAccount();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
+  const [agentId, setAgentId] = useState<string | null>(agentIdParam);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const templateConfig = TEMPLATE_CONFIG[template] || TEMPLATE_CONFIG['default'];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -86,18 +235,38 @@ function ChatContent() {
     scrollToBottom();
   }, [messages]);
 
+  // Fetch agent info on mount
+  const fetchAgentInfo = useCallback(async () => {
+    const id = agentId || process.env.NEXT_PUBLIC_KITE_CLIENT_ID;
+    if (!id) return;
+    setAgentId(id);
+    try {
+      const res = await fetch(`/api/agent-info?agentId=${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAgentInfo(data);
+      }
+    } catch {
+      // Agent info fetch is non-critical
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    fetchAgentInfo();
+  }, [fetchAgentInfo]);
+
   // Welcome message
   useEffect(() => {
-    const templateName = template.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const name = templateConfig.name;
     setMessages([
       {
         id: 'welcome',
         role: 'assistant',
-        content: `Hello! I'm your ${templateName !== 'Default' ? templateName : 'Kite'} Agent. I'm powered by Kite Agent Passport and can help you with tasks, make x402 payments on your behalf within your spending limits. How can I assist you today?`,
+        content: `Hello! I'm your ${name} Agent, powered by Kite Agent Passport.\n\nI can authenticate myself on-chain, execute tasks autonomously, and make x402 payments within your spending rules -- all gasless on Kite.\n\nTry asking me to:\n- "Show me your identity" (agent self-authentication)\n- "What can you do?" (list MCP capabilities)\n- "Get me premium research" (x402 payment flow)\n- "Check my spending rules" (scoped permissions)\n\nHow can I help you?`,
         timestamp: new Date(),
       },
     ]);
-  }, [template]);
+  }, [templateConfig.name]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,14 +279,12 @@ function ChatContent() {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
     setError(null);
 
     try {
-      const systemPrompt = SYSTEM_PROMPTS[template] || SYSTEM_PROMPTS['default'];
-      
       const chatMessages = messages
         .filter(m => m.role !== 'system' && m.id !== 'welcome')
         .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
@@ -126,25 +293,28 @@ function ChatContent() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: chatMessages, systemPrompt }),
+        body: JSON.stringify({
+          messages: chatMessages,
+          systemPrompt: templateConfig.systemPrompt,
+          agentId: agentId || process.env.NEXT_PUBLIC_KITE_CLIENT_ID || undefined,
+        }),
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to get response');
       }
 
-      const assistantContent = data.reply || "I apologize, I couldn't generate a response.";
-      
       const assistantMessage: Message = {
         id: `assistant_${Date.now()}`,
         role: 'assistant',
-        content: assistantContent,
+        content: data.reply || "I apologize, I couldn't generate a response.",
         timestamp: new Date(),
+        actions: data.actions || [],
       };
-      
-      setMessages((prev) => [...prev, assistantMessage]);
+
+      setMessages(prev => [...prev, assistantMessage]);
     } catch (err) {
       console.error('Chat error:', err);
       setError('Failed to get response. Please try again.');
@@ -163,68 +333,55 @@ function ChatContent() {
     );
   }
 
-  const templateName = template.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-4 p-4 border-b border-gray-800">
-        <button
-          onClick={() => router.push('/dashboard')}
-          className="text-gray-400 hover:text-white transition"
-        >
-          ← Back
-        </button>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-kite-primary/20 rounded-full flex items-center justify-center text-xl">
-            {template === 'defi-trader' && '📈'}
-            {template === 'nft-collector' && '🖼️'}
-            {template === 'research-analyst' && '🔬'}
-            {template === 'security-auditor' && '🛡️'}
-            {template === 'social-manager' && '📱'}
-            {template === 'dao-delegate' && '🏛️'}
-            {template === 'default' && '🤖'}
-          </div>
-          <div>
-            <h1 className="font-semibold">{templateName} Agent</h1>
-            <p className="text-xs text-gray-500">Powered by Kite Agent Passport</p>
-          </div>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-          <span className="text-sm text-gray-400">Online</span>
-        </div>
-      </div>
+      <AgentHeader
+        templateConfig={templateConfig}
+        agentInfo={agentInfo}
+        agentId={agentId}
+        onBack={() => router.push('/dashboard')}
+      />
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[80%] p-4 rounded-2xl ${
-                message.role === 'user'
-                  ? 'bg-kite-primary text-white rounded-br-md'
-                  : 'bg-gray-800 text-gray-100 rounded-bl-md'
-              }`}
-            >
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-              <p className="text-xs mt-2 opacity-50">
-                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
+        {messages.map(message => (
+          <div key={message.id}>
+            <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-[80%] p-4 rounded-2xl ${
+                  message.role === 'user'
+                    ? 'bg-kite-primary text-white rounded-br-md'
+                    : 'bg-gray-800 text-gray-100 rounded-bl-md'
+                }`}
+              >
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                <p className="text-xs mt-2 opacity-50">
+                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
             </div>
+
+            {/* Action cards */}
+            {message.actions && message.actions.length > 0 && (
+              <div className="mt-2 ml-0 space-y-2 max-w-[80%]">
+                {message.actions.map((action, i) => (
+                  <ActionCard key={i} action={action} />
+                ))}
+              </div>
+            )}
           </div>
         ))}
-        
+
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-gray-800 p-4 rounded-2xl rounded-bl-md">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-kite-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-kite-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-kite-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-xs text-gray-500">Agent executing...</span>
               </div>
             </div>
           </div>
@@ -237,7 +394,7 @@ function ChatContent() {
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -247,7 +404,7 @@ function ChatContent() {
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={e => setInput(e.target.value)}
             placeholder="Ask your agent anything..."
             className="flex-1 p-4 bg-gray-900 border border-gray-700 rounded-xl focus:border-kite-primary outline-none"
             disabled={isLoading}
@@ -260,9 +417,21 @@ function ChatContent() {
             Send
           </button>
         </div>
-        <p className="text-xs text-gray-500 mt-2 text-center">
-          Powered by Kite Agent Passport • x402 payments may apply
-        </p>
+        <div className="flex items-center justify-between mt-2 px-1">
+          <p className="text-xs text-gray-500">
+            Powered by Kite Agent Passport
+            {agentInfo?.authenticated && (
+              <span className="text-green-500 ml-2">Agent verified on-chain</span>
+            )}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-gray-600">
+            <span>x402</span>
+            <span>|</span>
+            <span>Gasless</span>
+            <span>|</span>
+            <span>Kite Testnet</span>
+          </div>
+        </div>
       </form>
     </div>
   );
@@ -270,11 +439,13 @@ function ChatContent() {
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-[calc(100vh-80px)]">
-        <div className="animate-spin text-4xl">🪁</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-[calc(100vh-80px)]">
+          <div className="animate-spin text-4xl">🪁</div>
+        </div>
+      }
+    >
       <ChatContent />
     </Suspense>
   );

@@ -27,8 +27,8 @@ export class KiteAAClient {
       const { GokiteAASDK } = await import('gokite-aa-sdk');
       this.sdk = new GokiteAASDK(
         'kite_testnet',
-        this.config.rpcUrl,
-        this.config.bundlerUrl
+        this.config.rpcUrl!,
+        this.config.bundlerUrl!
       );
     }
     return this.sdk;

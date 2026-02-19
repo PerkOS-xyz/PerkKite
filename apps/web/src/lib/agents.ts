@@ -1,13 +1,14 @@
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  addDoc, 
-  deleteDoc, 
-  query, 
+import {
+  collection,
+  doc,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  query,
   where,
   orderBy,
-  Timestamp 
+  Timestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -19,6 +20,7 @@ export interface Agent {
   walletAddress: string;
   knowledge: string[];
   createdAt: Timestamp | Date;
+  revoked?: boolean;
 }
 
 const AGENTS_COLLECTION = 'agents';
@@ -29,7 +31,7 @@ export async function getAgentsByWallet(walletAddress: string): Promise<Agent[]>
     where('walletAddress', '==', walletAddress.toLowerCase()),
     orderBy('createdAt', 'desc')
   );
-  
+
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({
     id: doc.id,
@@ -48,6 +50,12 @@ export async function addAgent(agent: Omit<Agent, 'id'>): Promise<string> {
 
 export async function deleteAgent(agentId: string): Promise<void> {
   await deleteDoc(doc(db, AGENTS_COLLECTION, agentId));
+}
+
+export async function revokeAgent(agentId: string): Promise<void> {
+  await updateDoc(doc(db, AGENTS_COLLECTION, agentId), {
+    revoked: true,
+  });
 }
 
 export async function addKnowledgeToAgent(agentId: string, knowledgeId: string): Promise<void> {

@@ -84,7 +84,7 @@ export class KiteClient {
         throw new Error(`Settlement failed: ${response.status}`);
       }
 
-      const result = await response.json();
+      const result = await response.json() as { txHash?: string };
       return { success: true, txHash: result.txHash };
     } catch (error) {
       console.error('Payment settlement error:', error);

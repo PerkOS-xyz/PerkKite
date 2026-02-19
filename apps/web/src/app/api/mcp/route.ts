@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const KITE_MCP_URL = 'https://neo.dev.gokite.ai/v1/mcp';
+const DEV_MCP_URL = 'https://neo.dev.gokite.ai/v1/mcp';
+
+function getMCPConfig(agentId: string): { url: string; headers: Record<string, string> } {
+  const apiKey = process.env.KITE_API_KEY;
+  if (apiKey) {
+    return {
+      url: `https://mcp.prod.gokite.ai/${apiKey}/mcp`,
+      headers: { 'Content-Type': 'application/json' },
+    };
+  }
+  return {
+    url: process.env.KITE_MCP_URL || DEV_MCP_URL,
+    headers: { 'Content-Type': 'application/json', 'X-Agent-Id': agentId },
+  };
+}
 
 // MCP JSON-RPC proxy to Kite
 export async function POST(request: NextRequest) {
@@ -9,27 +23,20 @@ export async function POST(request: NextRequest) {
     const { agentId, method, params } = body;
 
     if (!agentId) {
-      return NextResponse.json(
-        { error: 'Missing agentId' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing agentId' }, { status: 400 });
     }
 
-    // Build MCP JSON-RPC request
-    const mcpRequest = {
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method,
-      params: params || {},
-    };
+    const { url, headers } = getMCPConfig(agentId);
 
-    const response = await fetch(KITE_MCP_URL, {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Agent-Id': agentId,
-      },
-      body: JSON.stringify(mcpRequest),
+      headers,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params: params || {},
+      }),
     });
 
     const data = await response.json();
@@ -48,28 +55,21 @@ export async function GET(request: NextRequest) {
   const agentId = request.nextUrl.searchParams.get('agentId');
 
   if (!agentId) {
-    return NextResponse.json(
-      { error: 'Missing agentId query param' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Missing agentId query param' }, { status: 400 });
   }
 
-  // List tools via MCP
-  const mcpRequest = {
-    jsonrpc: '2.0',
-    id: Date.now(),
-    method: 'tools/list',
-    params: {},
-  };
+  const { url, headers } = getMCPConfig(agentId);
 
   try {
-    const response = await fetch(KITE_MCP_URL, {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Agent-Id': agentId,
-      },
-      body: JSON.stringify(mcpRequest),
+      headers,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/list',
+        params: {},
+      }),
     });
 
     const data = await response.json();
