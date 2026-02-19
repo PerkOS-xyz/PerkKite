@@ -1,17 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useAccount } from 'wagmi';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { RUNTIMES, type RuntimeType } from '@perkkite/shared';
 import { addAgent } from '@/lib/agents';
 
 const KITE_PORTAL_URL = 'https://x402-portal-eight.vercel.app/';
 
-export default function NewAgentPage() {
+const templateNames: Record<string, string> = {
+  'defi-trader': 'DeFi Trader',
+  'nft-collector': 'NFT Collector',
+  'research-analyst': 'Research Analyst',
+  'security-auditor': 'Security Auditor',
+  'social-manager': 'Social Manager',
+  'dao-delegate': 'DAO Delegate',
+};
+
+function NewAgentContent() {
   const { address, isConnected } = useAccount();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [step, setStep] = useState(1);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     clientId: '',
@@ -21,6 +33,34 @@ export default function NewAgentPage() {
     dailyBudget: '5',
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  // Check for template from URL or localStorage
+  useEffect(() => {
+    const templateFromUrl = searchParams.get('template');
+    const categoryFromUrl = searchParams.get('category');
+    
+    if (templateFromUrl) {
+      setSelectedTemplate(templateFromUrl);
+      setFormData(prev => ({
+        ...prev,
+        name: templateNames[templateFromUrl] || '',
+        category: categoryFromUrl || prev.category,
+      }));
+    } else {
+      // Check localStorage for pending selection
+      const pending = localStorage.getItem('pendingTemplate');
+      if (pending) {
+        const { templateId, category } = JSON.parse(pending);
+        setSelectedTemplate(templateId);
+        setFormData(prev => ({
+          ...prev,
+          name: templateNames[templateId] || '',
+          category: category || prev.category,
+        }));
+        localStorage.removeItem('pendingTemplate');
+      }
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +74,7 @@ export default function NewAgentPage() {
         clientId: formData.clientId,
         mcpUrl: formData.mcpUrl,
         walletAddress: address,
-        knowledge: [],
+        knowledge: selectedTemplate ? [selectedTemplate] : [],
         createdAt: new Date(),
       });
       
@@ -81,6 +121,14 @@ export default function NewAgentPage() {
         {step === 1 && (
           <div className="space-y-6">
             <h2 className="text-xl font-semibold">Kite Agent Details</h2>
+            
+            {selectedTemplate && (
+              <div className="p-4 bg-kite-primary/10 border border-kite-primary rounded-lg">
+                <p className="text-sm text-kite-primary">
+                  <span className="font-medium">🎯 Template:</span> {templateNames[selectedTemplate]}
+                </p>
+              </div>
+            )}
             
             <div className="p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
               <p className="text-sm text-blue-300">
@@ -275,5 +323,18 @@ export default function NewAgentPage() {
         )}
       </form>
     </div>
+  );
+}
+
+export default function NewAgentPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-2xl mx-auto p-8 text-center">
+        <div className="animate-spin text-4xl mb-4">🪁</div>
+        <p className="text-gray-400">Loading...</p>
+      </div>
+    }>
+      <NewAgentContent />
+    </Suspense>
   );
 }

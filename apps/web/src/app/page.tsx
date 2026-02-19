@@ -1,10 +1,80 @@
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
+
+const templates = [
+  {
+    id: 'defi-trader',
+    name: 'DeFi Trader',
+    description: 'Yield optimization, token swaps, and portfolio tracking',
+    icon: '📈',
+    category: 'defi',
+    popular: true,
+  },
+  {
+    id: 'nft-collector',
+    name: 'NFT Collector',
+    description: 'Floor tracking, rarity analysis, marketplace navigation',
+    icon: '🖼️',
+    category: 'nft',
+    popular: true,
+  },
+  {
+    id: 'research-analyst',
+    name: 'Research Analyst',
+    description: 'Protocol docs, tokenomics analysis, market research',
+    icon: '🔬',
+    category: 'research',
+    popular: false,
+  },
+  {
+    id: 'security-auditor',
+    name: 'Security Auditor',
+    description: 'Contract analysis, rug detection, risk assessment',
+    icon: '🛡️',
+    category: 'security',
+    popular: true,
+  },
+  {
+    id: 'social-manager',
+    name: 'Social Manager',
+    description: 'Twitter monitoring, Farcaster, community management',
+    icon: '📱',
+    category: 'social',
+    popular: false,
+  },
+  {
+    id: 'dao-delegate',
+    name: 'DAO Delegate',
+    description: 'Governance proposals, voting analysis, delegate tracking',
+    icon: '🏛️',
+    category: 'governance',
+    popular: false,
+  },
+];
 
 export default function Home() {
+  const router = useRouter();
+  const { isConnected } = useAccount();
+  const { openConnectModal } = useConnectModal();
+
+  const handleTemplateClick = (templateId: string, category: string) => {
+    if (isConnected) {
+      router.push(`/agents/new?template=${templateId}&category=${category}`);
+    } else {
+      // Store selection and open connect modal
+      localStorage.setItem('pendingTemplate', JSON.stringify({ templateId, category }));
+      openConnectModal?.();
+    }
+  };
+
   return (
     <main className="min-h-screen">
       {/* Hero Section */}
-      <section className="flex flex-col items-center justify-center px-8 py-24 text-center">
+      <section className="flex flex-col items-center justify-center px-8 py-20 text-center">
         <div className="text-6xl mb-6">🪁</div>
         <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-kite-primary to-perkos-pink bg-clip-text text-transparent">
           PerkKite
@@ -33,30 +103,63 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How It Works */}
+      {/* Templates Section */}
       <section className="px-8 py-16 bg-gray-900/50">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-4">Agent Templates</h2>
+          <p className="text-gray-400 text-center mb-12">
+            Choose a template to get started with pre-configured knowledge
+          </p>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {templates.map((template) => (
+              <button
+                key={template.id}
+                onClick={() => handleTemplateClick(template.id, template.category)}
+                className="text-left bg-gray-900 rounded-xl border border-gray-800 hover:border-kite-primary transition overflow-hidden group"
+              >
+                {template.popular && (
+                  <div className="bg-gradient-to-r from-kite-primary to-perkos-pink text-xs font-medium py-1 px-3 text-center">
+                    🔥 Popular
+                  </div>
+                )}
+                <div className="p-6">
+                  <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">
+                    {template.icon}
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">{template.name}</h3>
+                  <p className="text-gray-400 text-sm">{template.description}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="px-8 py-16">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">How It Works</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center p-6">
               <div className="text-4xl mb-4">1️⃣</div>
-              <h3 className="text-xl font-semibold mb-2">Configure Your Agent</h3>
+              <h3 className="text-xl font-semibold mb-2">Choose a Template</h3>
               <p className="text-gray-400">
-                Set your agent&apos;s name, category, runtime, and daily spending limits through our wizard.
+                Select an agent template with pre-built knowledge for DeFi, NFTs, research, and more.
               </p>
             </div>
             <div className="text-center p-6">
               <div className="text-4xl mb-4">2️⃣</div>
               <h3 className="text-xl font-semibold mb-2">Connect to Kite</h3>
               <p className="text-gray-400">
-                Register your agent on Kite Agent Passport and get your MCP configuration for AI clients.
+                Link your Kite Agent Passport for identity and payment authorization.
               </p>
             </div>
             <div className="text-center p-6">
               <div className="text-4xl mb-4">3️⃣</div>
-              <h3 className="text-xl font-semibold mb-2">Start Transacting</h3>
+              <h3 className="text-xl font-semibold mb-2">Chat & Transact</h3>
               <p className="text-gray-400">
-                Your agent can now make x402 payments to services within your defined spending rules.
+                Talk to your agent and let it make x402 payments within your spending rules.
               </p>
             </div>
           </div>
@@ -64,75 +167,50 @@ export default function Home() {
       </section>
 
       {/* Architecture Diagram */}
-      <section className="px-8 py-16">
+      <section className="px-8 py-16 bg-gray-900/50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">Architecture</h2>
           
-          {/* Diagram */}
           <div className="relative bg-gray-900 rounded-xl border border-gray-800 p-8 overflow-x-auto">
             <div className="flex items-center justify-between min-w-[600px] gap-4">
-              {/* User */}
               <div className="flex flex-col items-center">
-                <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-3xl">
-                  👤
-                </div>
+                <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-3xl">👤</div>
                 <span className="mt-2 text-sm font-medium">User</span>
                 <span className="text-xs text-gray-500">Wallet Owner</span>
               </div>
-
-              {/* Arrow */}
               <div className="flex-1 flex items-center">
                 <div className="h-0.5 flex-1 bg-gradient-to-r from-blue-600 to-kite-primary"></div>
                 <div className="text-kite-primary">→</div>
               </div>
-
-              {/* PerkKite */}
               <div className="flex flex-col items-center">
-                <div className="w-20 h-20 bg-kite-primary rounded-xl flex items-center justify-center text-3xl">
-                  🪁
-                </div>
+                <div className="w-20 h-20 bg-kite-primary rounded-xl flex items-center justify-center text-3xl">🪁</div>
                 <span className="mt-2 text-sm font-medium">PerkKite</span>
-                <span className="text-xs text-gray-500">Agent Launcher</span>
+                <span className="text-xs text-gray-500">Templates + Chat</span>
               </div>
-
-              {/* Arrow */}
               <div className="flex-1 flex items-center">
                 <div className="h-0.5 flex-1 bg-gradient-to-r from-kite-primary to-purple-500"></div>
                 <div className="text-purple-500">→</div>
               </div>
-
-              {/* Kite Passport */}
               <div className="flex flex-col items-center">
-                <div className="w-20 h-20 bg-purple-600 rounded-xl flex items-center justify-center text-3xl">
-                  🎫
-                </div>
+                <div className="w-20 h-20 bg-purple-600 rounded-xl flex items-center justify-center text-3xl">🎫</div>
                 <span className="mt-2 text-sm font-medium">Kite Passport</span>
                 <span className="text-xs text-gray-500">Identity + Rules</span>
               </div>
-
-              {/* Arrow */}
               <div className="flex-1 flex items-center">
                 <div className="h-0.5 flex-1 bg-gradient-to-r from-purple-500 to-green-500"></div>
                 <div className="text-green-500">→</div>
               </div>
-
-              {/* AI Agent */}
               <div className="flex flex-col items-center">
-                <div className="w-20 h-20 bg-green-600 rounded-xl flex items-center justify-center text-3xl">
-                  🤖
-                </div>
+                <div className="w-20 h-20 bg-green-600 rounded-xl flex items-center justify-center text-3xl">🤖</div>
                 <span className="mt-2 text-sm font-medium">AI Agent</span>
                 <span className="text-xs text-gray-500">MCP Client</span>
               </div>
             </div>
 
-            {/* Bottom flow - Services */}
             <div className="mt-8 pt-8 border-t border-gray-700">
               <div className="flex items-center justify-center gap-4">
                 <div className="text-center">
-                  <div className="w-16 h-16 bg-yellow-600 rounded-lg flex items-center justify-center text-2xl mx-auto">
-                    🌐
-                  </div>
+                  <div className="w-16 h-16 bg-yellow-600 rounded-lg flex items-center justify-center text-2xl mx-auto">🌐</div>
                   <span className="text-xs text-gray-400 mt-1 block">x402 Service</span>
                 </div>
                 <div className="text-yellow-500">⟷</div>
@@ -141,64 +219,17 @@ export default function Home() {
                 </div>
                 <div className="text-yellow-500">⟷</div>
                 <div className="text-center">
-                  <div className="w-16 h-16 bg-perkos-pink rounded-lg flex items-center justify-center text-2xl mx-auto">
-                    💰
-                  </div>
+                  <div className="w-16 h-16 bg-perkos-pink rounded-lg flex items-center justify-center text-2xl mx-auto">💰</div>
                   <span className="text-xs text-gray-400 mt-1 block">Facilitator</span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Legend */}
-          <div className="flex justify-center gap-6 mt-6 text-sm text-gray-400">
-            <span>🔵 Owns wallet</span>
-            <span>🟢 Configures agent</span>
-            <span>🟣 Enforces rules</span>
-            <span>🟡 Settles payments</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="px-8 py-16 bg-gray-900/50">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">Why PerkKite?</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
-              <div className="text-2xl mb-3">🔐</div>
-              <h3 className="text-lg font-semibold mb-2">Secure by Design</h3>
-              <p className="text-gray-400 text-sm">
-                On-chain spending rules enforced by smart contracts. Your agent can only spend within the limits you set.
-              </p>
-            </div>
-            <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
-              <div className="text-2xl mb-3">⚡</div>
-              <h3 className="text-lg font-semibold mb-2">x402 Native</h3>
-              <p className="text-gray-400 text-sm">
-                Built on the x402 payment protocol. Your agent pays for services with HTTP 402 responses — no API keys needed.
-              </p>
-            </div>
-            <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
-              <div className="text-2xl mb-3">🪁</div>
-              <h3 className="text-lg font-semibold mb-2">Kite Agent Passport</h3>
-              <p className="text-gray-400 text-sm">
-                3-tier identity model: User → Agent → Session. Full control with programmable delegations.
-              </p>
-            </div>
-            <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
-              <div className="text-2xl mb-3">🤖</div>
-              <h3 className="text-lg font-semibold mb-2">MCP Ready</h3>
-              <p className="text-gray-400 text-sm">
-                Connect to Claude Desktop, Cursor, or any MCP-compatible AI client with one-click configuration.
-              </p>
             </div>
           </div>
         </div>
       </section>
 
       {/* x402 Flow */}
-      <section className="px-8 py-16 bg-gray-900/50">
+      <section className="px-8 py-16">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-8">The x402 Payment Flow</h2>
           <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 text-left font-mono text-sm">
@@ -214,10 +245,10 @@ export default function Home() {
       </section>
 
       {/* CTA */}
-      <section className="px-8 py-24 text-center">
+      <section className="px-8 py-20 text-center bg-gray-900/50">
         <h2 className="text-3xl font-bold mb-4">Ready to Launch Your Agent?</h2>
         <p className="text-gray-400 mb-8 max-w-md mx-auto">
-          Create your first AI agent with secure, delegated payments in minutes.
+          Choose a template above or create a custom agent from scratch.
         </p>
         <Link
           href="/dashboard"
