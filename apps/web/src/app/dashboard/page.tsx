@@ -1,70 +1,188 @@
-export default function Dashboard() {
+'use client';
+
+import { useState } from 'react';
+import { useAccount } from 'wagmi';
+import Link from 'next/link';
+
+interface Agent {
+  id: string;
+  name: string;
+  clientId: string;
+  mcpUrl: string;
+  createdAt: string;
+}
+
+export default function DashboardPage() {
+  const { address, isConnected } = useAccount();
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newAgent, setNewAgent] = useState({ name: '', clientId: '', mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' });
+
+  const handleAddAgent = () => {
+    if (!newAgent.name || !newAgent.clientId) return;
+    
+    const agent: Agent = {
+      id: `agent_${Date.now()}`,
+      name: newAgent.name,
+      clientId: newAgent.clientId,
+      mcpUrl: newAgent.mcpUrl,
+      createdAt: new Date().toISOString(),
+    };
+    
+    setAgents([...agents, agent]);
+    setNewAgent({ name: '', clientId: '', mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' });
+    setShowAddModal(false);
+  };
+
+  if (!isConnected) {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-16 text-center">
+        <div className="text-6xl mb-6">🔐</div>
+        <h1 className="text-3xl font-bold mb-4">Connect Your Wallet</h1>
+        <p className="text-gray-400 mb-8">
+          Connect your wallet to manage your Kite agents and access the knowledge marketplace.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-gray-400">Manage your AI agents</p>
+          <h1 className="text-3xl font-bold">My Agents</h1>
+          <p className="text-gray-400">Manage your Kite agents and knowledge</p>
         </div>
-        <a
-          href="/agents/new"
+        <button
+          onClick={() => setShowAddModal(true)}
           className="px-4 py-2 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
         >
-          + New Agent
-        </a>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
-          <h3 className="text-lg font-semibold mb-2">🤖 Agents</h3>
-          <p className="text-3xl font-bold">0</p>
-        </div>
-        <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
-          <h3 className="text-lg font-semibold mb-2">🎫 Sessions</h3>
-          <p className="text-3xl font-bold">0</p>
-        </div>
-        <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
-          <h3 className="text-lg font-semibold mb-2">💰 Spent</h3>
-          <p className="text-3xl font-bold">$0.00</p>
-        </div>
+          + Add Agent
+        </button>
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-        <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <a
-            href="/agents/new"
-            className="p-4 border border-gray-700 rounded-lg hover:border-kite-primary transition group"
-          >
-            <h3 className="font-semibold group-hover:text-kite-primary">🚀 Launch Agent</h3>
-            <p className="text-sm text-gray-400">Create a new AI agent with Kite Passport</p>
+      {/* Info Banner */}
+      <div className="p-4 bg-gray-900 rounded-lg border border-gray-800 mb-8">
+        <p className="text-sm text-gray-400">
+          <span className="text-kite-primary font-medium">💡 Tip:</span> First create your agent in the{' '}
+          <a href="https://x402-portal-eight.vercel.app/" target="_blank" rel="noopener noreferrer" className="text-kite-primary hover:underline">
+            Kite Portal
           </a>
-          <a
-            href="https://docs.gokite.ai/kite-agent-passport"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-4 border border-gray-700 rounded-lg hover:border-kite-primary transition group"
-          >
-            <h3 className="font-semibold group-hover:text-kite-primary">📚 Documentation</h3>
-            <p className="text-sm text-gray-400">Learn about Kite Agent Passport</p>
-          </a>
-        </div>
+          , then add it here with your Client ID to customize knowledge and chat.
+        </p>
       </div>
 
-      {/* Agents List Placeholder */}
-      <div className="mt-8">
-        <h2 className="text-xl font-semibold mb-4">Your Agents</h2>
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
-          <p className="text-gray-400 mb-4">No agents yet. Create your first agent to get started!</p>
-          <a
-            href="/agents/new"
-            className="inline-block px-6 py-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
+      {/* Agents Grid */}
+      {agents.length === 0 ? (
+        <div className="text-center py-16 bg-gray-900/50 rounded-xl border border-dashed border-gray-700">
+          <div className="text-4xl mb-4">🪁</div>
+          <h3 className="text-xl font-medium mb-2">No agents yet</h3>
+          <p className="text-gray-400 mb-6">Add your first Kite agent to get started</p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-6 py-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
           >
-            Create Agent
-          </a>
+            + Add Agent
+          </button>
         </div>
-      </div>
+      ) : (
+        <div className="grid gap-4">
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              className="p-6 bg-gray-900 rounded-xl border border-gray-800 hover:border-gray-700 transition"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-kite-primary/20 rounded-xl flex items-center justify-center text-2xl">
+                    🤖
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">{agent.name}</h3>
+                    <p className="text-sm text-gray-500 font-mono">{agent.clientId.slice(0, 20)}...</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Link
+                    href={`/chat/${agent.id}`}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition"
+                  >
+                    💬 Chat
+                  </Link>
+                  <Link
+                    href={`/agents/${agent.id}/knowledge`}
+                    className="px-4 py-2 border border-gray-700 hover:border-gray-500 rounded-lg text-sm font-medium transition"
+                  >
+                    📚 Knowledge
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Agent Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4">Add Kite Agent</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Agent Name</label>
+                <input
+                  type="text"
+                  value={newAgent.name}
+                  onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-kite-primary outline-none"
+                  placeholder="My Trading Agent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Client ID</label>
+                <input
+                  type="text"
+                  value={newAgent.clientId}
+                  onChange={(e) => setNewAgent({ ...newAgent, clientId: e.target.value })}
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
+                  placeholder="client_agent_yCQRgvatvJD4sQWiVn7vmtjN"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Find this in Kite Portal → Agents → MCP Config
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">MCP URL</label>
+                <input
+                  type="text"
+                  value={newAgent.mcpUrl}
+                  onChange={(e) => setNewAgent({ ...newAgent, mcpUrl: e.target.value })}
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 px-4 py-3 border border-gray-700 hover:border-gray-500 rounded-lg font-medium transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddAgent}
+                disabled={!newAgent.name || !newAgent.clientId}
+                className="flex-1 px-4 py-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition disabled:opacity-50"
+              >
+                Add Agent
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
