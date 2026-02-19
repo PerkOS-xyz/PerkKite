@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import { getAgentsByWallet, addAgent, deleteAgent, type Agent } from '@/lib/agents';
+import { listTools } from '@/lib/mcp';
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
@@ -16,6 +17,8 @@ export default function DashboardPage() {
     clientId: '', 
     mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' 
   });
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testError, setTestError] = useState('');
 
   // Load agents when wallet connects
   useEffect(() => {
@@ -37,6 +40,22 @@ export default function DashboardPage() {
       console.error('Error loading agents:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!newAgent.clientId) return;
+    
+    setTestStatus('testing');
+    setTestError('');
+    
+    try {
+      const tools = await listTools(newAgent.clientId);
+      console.log('MCP tools:', tools);
+      setTestStatus('success');
+    } catch (error) {
+      setTestStatus('error');
+      setTestError(String(error));
     }
   };
 
@@ -211,6 +230,20 @@ export default function DashboardPage() {
                 <p className="text-xs text-gray-500 mt-1">
                   Find this in Kite Portal → Agents → MCP Config
                 </p>
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={!newAgent.clientId || testStatus === 'testing'}
+                  className="mt-2 px-3 py-1 text-xs bg-gray-800 hover:bg-gray-700 rounded border border-gray-600 transition disabled:opacity-50"
+                >
+                  {testStatus === 'testing' ? '🔄 Testing...' : '🔗 Test Connection'}
+                </button>
+                {testStatus === 'success' && (
+                  <p className="text-xs text-green-400 mt-1">✅ Connected to MCP!</p>
+                )}
+                {testStatus === 'error' && (
+                  <p className="text-xs text-red-400 mt-1">❌ {testError || 'Connection failed'}</p>
+                )}
               </div>
 
               <div>
@@ -226,7 +259,7 @@ export default function DashboardPage() {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setTestStatus('idle'); setTestError(''); }}
                 className="flex-1 px-4 py-3 border border-gray-700 hover:border-gray-500 rounded-lg font-medium transition"
               >
                 Cancel
