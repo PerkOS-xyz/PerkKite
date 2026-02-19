@@ -1,37 +1,78 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
-
-interface Agent {
-  id: string;
-  name: string;
-  clientId: string;
-  mcpUrl: string;
-  createdAt: string;
-}
+import { getAgentsByWallet, addAgent, deleteAgent, type Agent } from '@/lib/agents';
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newAgent, setNewAgent] = useState({ name: '', clientId: '', mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' });
+  const [saving, setSaving] = useState(false);
+  const [newAgent, setNewAgent] = useState({ 
+    name: '', 
+    clientId: '', 
+    mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' 
+  });
 
-  const handleAddAgent = () => {
-    if (!newAgent.name || !newAgent.clientId) return;
+  // Load agents when wallet connects
+  useEffect(() => {
+    if (address) {
+      loadAgents();
+    } else {
+      setAgents([]);
+      setLoading(false);
+    }
+  }, [address]);
+
+  const loadAgents = async () => {
+    if (!address) return;
+    setLoading(true);
+    try {
+      const data = await getAgentsByWallet(address);
+      setAgents(data);
+    } catch (error) {
+      console.error('Error loading agents:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddAgent = async () => {
+    if (!newAgent.name || !newAgent.clientId || !address) return;
     
-    const agent: Agent = {
-      id: `agent_${Date.now()}`,
-      name: newAgent.name,
-      clientId: newAgent.clientId,
-      mcpUrl: newAgent.mcpUrl,
-      createdAt: new Date().toISOString(),
-    };
+    setSaving(true);
+    try {
+      await addAgent({
+        name: newAgent.name,
+        clientId: newAgent.clientId,
+        mcpUrl: newAgent.mcpUrl,
+        walletAddress: address,
+        knowledge: [],
+        createdAt: new Date(),
+      });
+      
+      setNewAgent({ name: '', clientId: '', mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' });
+      setShowAddModal(false);
+      await loadAgents();
+    } catch (error) {
+      console.error('Error adding agent:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAgent = async (agentId: string) => {
+    if (!confirm('Are you sure you want to remove this agent?')) return;
     
-    setAgents([...agents, agent]);
-    setNewAgent({ name: '', clientId: '', mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' });
-    setShowAddModal(false);
+    try {
+      await deleteAgent(agentId);
+      await loadAgents();
+    } catch (error) {
+      console.error('Error deleting agent:', error);
+    }
   };
 
   if (!isConnected) {
@@ -72,8 +113,13 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Agents Grid */}
-      {agents.length === 0 ? (
+      {/* Loading State */}
+      {loading ? (
+        <div className="text-center py-16">
+          <div className="animate-spin text-4xl mb-4">🪁</div>
+          <p className="text-gray-400">Loading your agents...</p>
+        </div>
+      ) : agents.length === 0 ? (
         <div className="text-center py-16 bg-gray-900/50 rounded-xl border border-dashed border-gray-700">
           <div className="text-4xl mb-4">🪁</div>
           <h3 className="text-xl font-medium mb-2">No agents yet</h3>
@@ -99,7 +145,14 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-lg">{agent.name}</h3>
-                    <p className="text-sm text-gray-500 font-mono">{agent.clientId.slice(0, 20)}...</p>
+                    <p className="text-sm text-gray-500 font-mono">
+                      {agent.clientId.length > 25 ? `${agent.clientId.slice(0, 25)}...` : agent.clientId}
+                    </p>
+                    {agent.knowledge?.length > 0 && (
+                      <p className="text-xs text-kite-primary mt-1">
+                        📚 {agent.knowledge.length} knowledge pack{agent.knowledge.length > 1 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -110,11 +163,17 @@ export default function DashboardPage() {
                     💬 Chat
                   </Link>
                   <Link
-                    href={`/agents/${agent.id}/knowledge`}
+                    href={`/marketplace?agent=${agent.id}`}
                     className="px-4 py-2 border border-gray-700 hover:border-gray-500 rounded-lg text-sm font-medium transition"
                   >
                     📚 Knowledge
                   </Link>
+                  <button
+                    onClick={() => handleDeleteAgent(agent.id!)}
+                    className="px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition"
+                  >
+                    🗑️
+                  </button>
                 </div>
               </div>
             </div>
@@ -174,10 +233,10 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={handleAddAgent}
-                disabled={!newAgent.name || !newAgent.clientId}
+                disabled={!newAgent.name || !newAgent.clientId || saving}
                 className="flex-1 px-4 py-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition disabled:opacity-50"
               >
-                Add Agent
+                {saving ? 'Saving...' : 'Add Agent'}
               </button>
             </div>
           </div>
