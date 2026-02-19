@@ -63,8 +63,105 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features */}
+      {/* Architecture Diagram */}
       <section className="px-8 py-16">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-12">Architecture</h2>
+          
+          {/* Diagram */}
+          <div className="relative bg-gray-900 rounded-xl border border-gray-800 p-8 overflow-x-auto">
+            <div className="flex items-center justify-between min-w-[600px] gap-4">
+              {/* User */}
+              <div className="flex flex-col items-center">
+                <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-3xl">
+                  👤
+                </div>
+                <span className="mt-2 text-sm font-medium">User</span>
+                <span className="text-xs text-gray-500">Wallet Owner</span>
+              </div>
+
+              {/* Arrow */}
+              <div className="flex-1 flex items-center">
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-blue-600 to-kite-primary"></div>
+                <div className="text-kite-primary">→</div>
+              </div>
+
+              {/* PerkKite */}
+              <div className="flex flex-col items-center">
+                <div className="w-20 h-20 bg-kite-primary rounded-xl flex items-center justify-center text-3xl">
+                  🪁
+                </div>
+                <span className="mt-2 text-sm font-medium">PerkKite</span>
+                <span className="text-xs text-gray-500">Agent Launcher</span>
+              </div>
+
+              {/* Arrow */}
+              <div className="flex-1 flex items-center">
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-kite-primary to-purple-500"></div>
+                <div className="text-purple-500">→</div>
+              </div>
+
+              {/* Kite Passport */}
+              <div className="flex flex-col items-center">
+                <div className="w-20 h-20 bg-purple-600 rounded-xl flex items-center justify-center text-3xl">
+                  🎫
+                </div>
+                <span className="mt-2 text-sm font-medium">Kite Passport</span>
+                <span className="text-xs text-gray-500">Identity + Rules</span>
+              </div>
+
+              {/* Arrow */}
+              <div className="flex-1 flex items-center">
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-purple-500 to-green-500"></div>
+                <div className="text-green-500">→</div>
+              </div>
+
+              {/* AI Agent */}
+              <div className="flex flex-col items-center">
+                <div className="w-20 h-20 bg-green-600 rounded-xl flex items-center justify-center text-3xl">
+                  🤖
+                </div>
+                <span className="mt-2 text-sm font-medium">AI Agent</span>
+                <span className="text-xs text-gray-500">MCP Client</span>
+              </div>
+            </div>
+
+            {/* Bottom flow - Services */}
+            <div className="mt-8 pt-8 border-t border-gray-700">
+              <div className="flex items-center justify-center gap-4">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-yellow-600 rounded-lg flex items-center justify-center text-2xl mx-auto">
+                    🌐
+                  </div>
+                  <span className="text-xs text-gray-400 mt-1 block">x402 Service</span>
+                </div>
+                <div className="text-yellow-500">⟷</div>
+                <div className="px-4 py-2 bg-gray-800 rounded-lg text-sm">
+                  <span className="text-yellow-400">402</span> → <span className="text-purple-400">X-PAYMENT</span> → <span className="text-green-400">200 OK</span>
+                </div>
+                <div className="text-yellow-500">⟷</div>
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-perkos-pink rounded-lg flex items-center justify-center text-2xl mx-auto">
+                    💰
+                  </div>
+                  <span className="text-xs text-gray-400 mt-1 block">Facilitator</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="flex justify-center gap-6 mt-6 text-sm text-gray-400">
+            <span>🔵 Owns wallet</span>
+            <span>🟢 Configures agent</span>
+            <span>🟣 Enforces rules</span>
+            <span>🟡 Settles payments</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="px-8 py-16 bg-gray-900/50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">Why PerkKite?</h2>
           <div className="grid md:grid-cols-2 gap-6">
