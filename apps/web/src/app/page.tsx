@@ -17,10 +17,10 @@ export default function Home() {
         </p>
         <div className="flex gap-4">
           <Link
-            href="/agents/new"
+            href="/dashboard"
             className="px-8 py-4 bg-kite-primary hover:bg-kite-secondary rounded-lg font-semibold text-lg transition"
           >
-            Create Agent →
+            Launch App →
           </Link>
           <a
             href="https://docs.gokite.ai/kite-agent-passport"
@@ -220,7 +220,7 @@ export default function Home() {
           Create your first AI agent with secure, delegated payments in minutes.
         </p>
         <Link
-          href="/agents/new"
+          href="/dashboard"
           className="inline-block px-8 py-4 bg-kite-primary hover:bg-kite-secondary rounded-lg font-semibold text-lg transition"
         >
           Get Started →

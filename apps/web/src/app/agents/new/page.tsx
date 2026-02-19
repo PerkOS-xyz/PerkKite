@@ -1,16 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import { useAccount } from 'wagmi';
+import { useRouter } from 'next/navigation';
 import { RUNTIMES, type RuntimeType } from '@perkkite/shared';
+import { addAgent } from '@/lib/agents';
 
-// Kite Portal URL for real agent creation
 const KITE_PORTAL_URL = 'https://x402-portal-eight.vercel.app/';
 
 export default function NewAgentPage() {
+  const { address, isConnected } = useAccount();
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
+    clientId: '',
+    mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp',
     category: 'general',
     runtimeType: 'nano-claw' as RuntimeType,
     dailyBudget: '5',
@@ -19,20 +24,45 @@ export default function NewAgentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!address || !formData.name || !formData.clientId) return;
+    
     setIsLoading(true);
     
-    // Simulate creation delay
-    await new Promise(r => setTimeout(r, 1500));
-    
-    // For MVP: Show success and redirect to Kite Portal
-    setStep(4);
-    setIsLoading(false);
+    try {
+      await addAgent({
+        name: formData.name,
+        clientId: formData.clientId,
+        mcpUrl: formData.mcpUrl,
+        walletAddress: address,
+        knowledge: [],
+        createdAt: new Date(),
+      });
+      
+      setStep(4);
+    } catch (error) {
+      console.error('Error creating agent:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // Require wallet connection
+  if (!isConnected) {
+    return (
+      <div className="max-w-2xl mx-auto p-8 text-center">
+        <div className="text-6xl mb-6">🔐</div>
+        <h1 className="text-3xl font-bold mb-4">Connect Your Wallet</h1>
+        <p className="text-gray-400 mb-8">
+          Connect your wallet to create and manage your Kite agents.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-3xl font-bold mb-2">Create New Agent</h1>
-      <p className="text-gray-400 mb-8">Launch an AI agent with Kite Agent Passport</p>
+      <h1 className="text-3xl font-bold mb-2">Add Kite Agent</h1>
+      <p className="text-gray-400 mb-8">Link your Kite Agent Passport to PerkKite</p>
 
       {/* Progress Steps */}
       <div className="flex gap-2 mb-8">
@@ -47,93 +77,101 @@ export default function NewAgentPage() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* Step 1: Basic Info */}
+        {/* Step 1: Kite Agent Info */}
         {step === 1 && (
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold">Agent Details</h2>
+            <h2 className="text-xl font-semibold">Kite Agent Details</h2>
+            
+            <div className="p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-300">
+                <span className="font-medium">📋 First:</span> Create your agent in the{' '}
+                <a href={KITE_PORTAL_URL} target="_blank" rel="noopener noreferrer" className="underline">
+                  Kite Portal
+                </a>
+                , then come back and paste your Client ID here.
+              </p>
+            </div>
             
             <div>
-              <label className="block text-sm font-medium mb-2">Name</label>
+              <label className="block text-sm font-medium mb-2">Agent Name</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-kite-primary outline-none"
-                placeholder="My AI Agent"
+                placeholder="My Trading Agent"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-kite-primary outline-none h-24"
-                placeholder="What does your agent do?"
+              <label className="block text-sm font-medium mb-2">Client ID (from Kite Portal)</label>
+              <input
+                type="text"
+                value={formData.clientId}
+                onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
+                placeholder="client_agent_yCQRgvatvJD4sQWiVn7vmtjN"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Kite Portal → Agents → Click agent → MCP Config → Copy Client ID
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Category</label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-kite-primary outline-none"
-              >
-                <option value="general">General</option>
-                <option value="defi">DeFi</option>
-                <option value="nft">NFT</option>
-                <option value="social">Social</option>
-                <option value="data">Data</option>
-              </select>
+              <label className="block text-sm font-medium mb-2">MCP URL</label>
+              <input
+                type="text"
+                value={formData.mcpUrl}
+                onChange={(e) => setFormData({ ...formData, mcpUrl: e.target.value })}
+                className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
+              />
             </div>
 
             <button
               type="button"
               onClick={() => setStep(2)}
-              disabled={!formData.name || !formData.description}
+              disabled={!formData.name || !formData.clientId}
               className="w-full p-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition disabled:opacity-50"
             >
-              Next: Select Runtime
+              Next: Select Category
             </button>
           </div>
         )}
 
-        {/* Step 2: Runtime Selection */}
+        {/* Step 2: Category */}
         {step === 2 && (
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold">Select Runtime</h2>
+            <h2 className="text-xl font-semibold">Agent Category</h2>
             
-            <div className="grid gap-4">
-              {Object.values(RUNTIMES).map((runtime) => (
+            <div className="grid grid-cols-2 gap-4">
+              {['general', 'defi', 'nft', 'social', 'research', 'security'].map((cat) => (
                 <label
-                  key={runtime.id}
-                  className={`p-4 border rounded-lg cursor-pointer transition ${
-                    formData.runtimeType === runtime.id
+                  key={cat}
+                  className={`p-4 border rounded-lg cursor-pointer transition text-center ${
+                    formData.category === cat
                       ? 'border-kite-primary bg-kite-primary/10'
                       : 'border-gray-700 hover:border-gray-500'
                   }`}
                 >
                   <input
                     type="radio"
-                    name="runtime"
-                    value={runtime.id}
-                    checked={formData.runtimeType === runtime.id}
-                    onChange={(e) => setFormData({ ...formData, runtimeType: e.target.value as RuntimeType })}
+                    name="category"
+                    value={cat}
+                    checked={formData.category === cat}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="sr-only"
                   />
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-semibold">{runtime.name}</h3>
-                      <p className="text-sm text-gray-400">{runtime.description}</p>
-                    </div>
-                    <div className="text-right text-sm text-gray-500">
-                      <div>{runtime.resources.cpu}</div>
-                      <div>{runtime.resources.memory}</div>
-                    </div>
+                  <div className="text-2xl mb-2">
+                    {cat === 'general' && '🤖'}
+                    {cat === 'defi' && '📈'}
+                    {cat === 'nft' && '🖼️'}
+                    {cat === 'social' && '📱'}
+                    {cat === 'research' && '🔬'}
+                    {cat === 'security' && '🛡️'}
                   </div>
+                  <span className="capitalize font-medium">{cat}</span>
                 </label>
               ))}
             </div>
@@ -151,39 +189,43 @@ export default function NewAgentPage() {
                 onClick={() => setStep(3)}
                 className="flex-1 p-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
               >
-                Next: Spending Rules
+                Next: Confirm
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Spending Rules */}
+        {/* Step 3: Confirm */}
         {step === 3 && (
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold">Spending Rules</h2>
-            <p className="text-gray-400">Set limits for your agent&apos;s transactions</p>
+            <h2 className="text-xl font-semibold">Confirm Agent</h2>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Daily Budget (USDC)</label>
-              <input
-                type="number"
-                value={formData.dailyBudget}
-                onChange={(e) => setFormData({ ...formData, dailyBudget: e.target.value })}
-                className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-kite-primary outline-none"
-                min="1"
-                step="1"
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Maximum amount your agent can spend per 24 hours
-              </p>
+            <div className="p-4 bg-gray-900 rounded-lg border border-gray-700">
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Name:</span>
+                  <span className="font-medium">{formData.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Client ID:</span>
+                  <span className="font-mono text-xs">{formData.clientId.slice(0, 20)}...</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Category:</span>
+                  <span className="capitalize">{formData.category}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Wallet:</span>
+                  <span className="font-mono text-xs">{address?.slice(0, 10)}...</span>
+                </div>
+              </div>
             </div>
 
             <div className="p-4 bg-gray-900 rounded-lg border border-gray-700">
               <h3 className="font-medium mb-2">🔐 Kite Agent Passport</h3>
               <p className="text-sm text-gray-400">
-                Your agent will receive a smart contract wallet with programmable 
-                spending rules enforced on-chain. You maintain full control and can 
-                revoke access at any time.
+                Your agent&apos;s identity and spending rules are managed by Kite. 
+                PerkKite adds knowledge customization and a chat interface.
               </p>
             </div>
 
@@ -200,7 +242,7 @@ export default function NewAgentPage() {
                 disabled={isLoading}
                 className="flex-1 p-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition disabled:opacity-50"
               >
-                {isLoading ? 'Creating...' : 'Create Agent'}
+                {isLoading ? 'Saving...' : 'Add Agent'}
               </button>
             </div>
           </div>
@@ -210,48 +252,24 @@ export default function NewAgentPage() {
         {step === 4 && (
           <div className="text-center space-y-6">
             <div className="text-6xl">🪁</div>
-            <h2 className="text-2xl font-semibold">Agent Ready!</h2>
+            <h2 className="text-2xl font-semibold">Agent Added!</h2>
             <p className="text-gray-400">
-              Your agent <strong className="text-white">{formData.name}</strong> configuration is ready.
+              <strong className="text-white">{formData.name}</strong> is now linked to your wallet.
             </p>
             
-            <div className="p-4 bg-gray-900 rounded-lg border border-gray-700 text-left">
-              <h3 className="font-medium mb-3">📋 Agent Summary</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Name:</span>
-                  <span>{formData.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Category:</span>
-                  <span className="capitalize">{formData.category}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Runtime:</span>
-                  <span>{RUNTIMES[formData.runtimeType]?.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Daily Budget:</span>
-                  <span>{formData.dailyBudget} USDC</span>
-                </div>
-              </div>
-            </div>
-
             <div className="space-y-3">
-              <a
-                href={KITE_PORTAL_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => router.push('/dashboard')}
                 className="block w-full px-6 py-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
               >
-                Complete Setup in Kite Portal →
-              </a>
-              <a
-                href="/dashboard"
+                Go to Dashboard
+              </button>
+              <button
+                onClick={() => router.push('/marketplace')}
                 className="block w-full px-6 py-3 border border-gray-700 hover:border-gray-500 rounded-lg font-medium transition"
               >
-                Go to Dashboard
-              </a>
+                Add Knowledge →
+              </button>
             </div>
           </div>
         )}
