@@ -3,22 +3,80 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter, useSearchParams } from 'next/navigation';
+import OpenAI from 'openai';
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
 }
 
+const SYSTEM_PROMPTS: Record<string, string> = {
+  'defi-trader': `You are a DeFi Trading Agent powered by Kite Agent Passport. You specialize in:
+- Yield optimization and farming strategies
+- Token swaps and DEX aggregation
+- Portfolio tracking and rebalancing
+- Gas optimization for transactions
+
+You can make x402 payments on behalf of the user within their spending limits. When asked to perform actions that require payment, acknowledge the x402 protocol and spending rules.
+
+Be helpful, concise, and knowledgeable about DeFi protocols on Kite Chain and other networks.`,
+
+  'nft-collector': `You are an NFT Collector Agent powered by Kite Agent Passport. You specialize in:
+- Floor price tracking across marketplaces
+- Rarity analysis and trait evaluation
+- Marketplace navigation (OpenSea, Blur, etc.)
+- Portfolio valuation
+
+You can make x402 payments for NFT-related services. Be enthusiastic about NFTs but also practical about investments.`,
+
+  'research-analyst': `You are a Research Analyst Agent powered by Kite Agent Passport. You specialize in:
+- Protocol documentation analysis
+- Tokenomics evaluation
+- Market research and trends
+- Whitepaper summarization
+
+You provide thorough, well-researched answers. When making claims, be specific about sources and confidence levels.`,
+
+  'security-auditor': `You are a Security Auditor Agent powered by Kite Agent Passport. You specialize in:
+- Smart contract analysis
+- Rug pull detection patterns
+- Risk assessment scoring
+- Audit report interpretation
+
+You are cautious and thorough. Always highlight potential risks and never give financial advice. When in doubt, recommend professional audits.`,
+
+  'social-manager': `You are a Social Manager Agent powered by Kite Agent Passport. You specialize in:
+- Twitter/X monitoring and engagement
+- Farcaster integration
+- Community management strategies
+- Content drafting and scheduling
+
+You understand crypto culture and can help craft engaging social content while maintaining professionalism.`,
+
+  'dao-delegate': `You are a DAO Delegate Agent powered by Kite Agent Passport. You specialize in:
+- Governance proposal analysis
+- Voting pattern tracking
+- Delegate comparison
+- Deadline monitoring
+
+You help users stay informed about governance across multiple DAOs and make informed voting decisions.`,
+
+  'default': `You are a Kite Agent powered by Kite Agent Passport. You can help users with various tasks and make x402 payments on their behalf within configured spending limits.
+
+You are helpful, knowledgeable about Web3 and crypto, and always transparent about your capabilities and limitations.`
+};
+
 function ChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const agentId = searchParams.get('agent');
-  const { isConnected } = useAccount();
+  const template = searchParams.get('template') || 'default';
+  const { isConnected, address } = useAccount();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -31,15 +89,16 @@ function ChatContent() {
 
   // Welcome message
   useEffect(() => {
+    const templateName = template.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     setMessages([
       {
         id: 'welcome',
         role: 'assistant',
-        content: `Hello! I'm your Kite agent. I can help you with tasks and make x402 payments on your behalf within your spending limits. How can I assist you today?`,
+        content: `Hello! I'm your ${templateName !== 'Default' ? templateName : 'Kite'} Agent. I'm powered by Kite Agent Passport and can help you with tasks, make x402 payments on your behalf within your spending limits. How can I assist you today?`,
         timestamp: new Date(),
       },
     ]);
-  }, []);
+  }, [template]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,27 +114,72 @@ function ChatContent() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setError(null);
 
-    // Simulate AI response (in production, this would call the MCP endpoint)
-    setTimeout(() => {
-      const responses = [
-        "I understand. Let me check that for you using my available tools.",
-        "I can help with that! To proceed, I'll need to make an x402 payment. Your current daily budget allows for this transaction.",
-        "I've analyzed your request. Based on my knowledge, here's what I found...",
-        "Great question! Let me query the relevant services to get you accurate information.",
-        "I'm checking the current market conditions. This may require a small payment to the data provider.",
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+      
+      if (!apiKey || apiKey === 'your_openai_api_key') {
+        // Demo mode - simulate response
+        setTimeout(() => {
+          const responses = [
+            `I understand your request. As a ${template.replace(/-/g, ' ')} agent, I can help with that. Let me analyze the situation...`,
+            "I've checked the relevant data. Based on my analysis, here's what I found...",
+            "This would require an x402 payment of approximately 0.01 USDC. Your current daily budget allows for this transaction. Shall I proceed?",
+            "I'm querying the Kite network for the latest information. One moment...",
+            "Based on my knowledge and current market conditions, I recommend the following approach...",
+          ];
+          
+          const assistantMessage: Message = {
+            id: `assistant_${Date.now()}`,
+            role: 'assistant',
+            content: responses[Math.floor(Math.random() * responses.length)],
+            timestamp: new Date(),
+          };
+          
+          setMessages((prev) => [...prev, assistantMessage]);
+          setIsLoading(false);
+        }, 1500);
+        return;
+      }
+
+      const openai = new OpenAI({
+        apiKey,
+        dangerouslyAllowBrowser: true, // For demo - in production use backend
+      });
+
+      const systemPrompt = SYSTEM_PROMPTS[template] || SYSTEM_PROMPTS['default'];
+      
+      const chatMessages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...messages
+          .filter(m => m.role !== 'system' && m.id !== 'welcome')
+          .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+        { role: 'user' as const, content: userMessage.content }
       ];
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: chatMessages,
+        max_tokens: 500,
+      });
+
+      const assistantContent = response.choices[0]?.message?.content || "I apologize, I couldn't generate a response.";
       
       const assistantMessage: Message = {
         id: `assistant_${Date.now()}`,
         role: 'assistant',
-        content: responses[Math.floor(Math.random() * responses.length)],
+        content: assistantContent,
         timestamp: new Date(),
       };
       
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      console.error('Chat error:', err);
+      setError('Failed to get response. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   if (!isConnected) {
@@ -87,6 +191,8 @@ function ChatContent() {
       </div>
     );
   }
+
+  const templateName = template.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] max-w-4xl mx-auto">
@@ -100,10 +206,16 @@ function ChatContent() {
         </button>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-kite-primary/20 rounded-full flex items-center justify-center text-xl">
-            🤖
+            {template === 'defi-trader' && '📈'}
+            {template === 'nft-collector' && '🖼️'}
+            {template === 'research-analyst' && '🔬'}
+            {template === 'security-auditor' && '🛡️'}
+            {template === 'social-manager' && '📱'}
+            {template === 'dao-delegate' && '🏛️'}
+            {template === 'default' && '🤖'}
           </div>
           <div>
-            <h1 className="font-semibold">Kite Agent</h1>
+            <h1 className="font-semibold">{templateName} Agent</h1>
             <p className="text-xs text-gray-500">Powered by Kite Agent Passport</p>
           </div>
         </div>
@@ -127,7 +239,7 @@ function ChatContent() {
                   : 'bg-gray-800 text-gray-100 rounded-bl-md'
               }`}
             >
-              <p className="text-sm leading-relaxed">{message.content}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
               <p className="text-xs mt-2 opacity-50">
                 {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
@@ -143,6 +255,14 @@ function ChatContent() {
                 <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
                 <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex justify-center">
+            <div className="bg-red-900/20 border border-red-800 p-3 rounded-lg text-red-400 text-sm">
+              {error}
             </div>
           </div>
         )}
@@ -170,7 +290,7 @@ function ChatContent() {
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2 text-center">
-          Messages are processed via Kite MCP • x402 payments may apply
+          Powered by Kite Agent Passport • x402 payments may apply
         </p>
       </form>
     </div>

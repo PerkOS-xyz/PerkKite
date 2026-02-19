@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
@@ -63,13 +64,26 @@ export default function Home() {
 
   const handleTemplateClick = (templateId: string, category: string) => {
     if (isConnected) {
-      router.push(`/agents/new?template=${templateId}&category=${category}`);
+      // Go directly to chat with template
+      router.push(`/chat?template=${templateId}`);
     } else {
       // Store selection and open connect modal
       localStorage.setItem('pendingTemplate', JSON.stringify({ templateId, category }));
       openConnectModal?.();
     }
   };
+
+  // Check for pending template after connection
+  useEffect(() => {
+    if (isConnected) {
+      const pending = localStorage.getItem('pendingTemplate');
+      if (pending) {
+        const { templateId } = JSON.parse(pending);
+        localStorage.removeItem('pendingTemplate');
+        router.push(`/chat?template=${templateId}`);
+      }
+    }
+  }, [isConnected, router]);
 
   return (
     <main className="min-h-screen">
