@@ -2,263 +2,181 @@
 
 # 🪁 PerkKite
 
-### Spark for Kite — Agent Launcher on Kite Agent Passport
+### Knowledge Marketplace for Kite Agents
 
-**Launch AI agents with verifiable identity, delegated payments, and programmable governance.**
+**Customize your AI agents with templates, chat interface, and x402 payments powered by Kite Agent Passport.**
 
+[![Live Demo](https://img.shields.io/badge/Live-perkkite.netlify.app-00C7B7?style=for-the-badge)](https://perkkite.netlify.app)
 [![Kite](https://img.shields.io/badge/Kite-Agent_Passport-7C3AED?style=for-the-badge)](https://gokite.ai)
-[![PerkOS](https://img.shields.io/badge/PerkOS-Powered-EB1B69?style=for-the-badge)](https://perkos.xyz)
+[![PerkOS](https://img.shields.io/badge/PerkOS-Ecosystem-EB1B69?style=for-the-badge)](https://perkos.xyz)
 
 </div>
 
 ---
 
-## Features
+## 🎯 What is PerkKite?
 
-- 🔐 **Wallet Auth** — Connect with RainbowKit + wagmi
-- 🎫 **Kite Passport** — Verifiable agent identity
-- 💰 **Delegated Payments** — Sessions with spending rules
-- 🛠️ **MCP Integration** — `kite.pay()` for any agent
-- 📋 **Skills Management** — YAML-based skill definitions
+PerkKite is a **Knowledge Marketplace** for AI agents on Kite Agent Passport. It allows users to:
+
+1. **Connect Wallet** — Authenticate with your wallet
+2. **Link Kite Agent** — Paste your Client ID from Kite Portal
+3. **Choose Templates** — Pre-built knowledge packs for DeFi, NFTs, Security, etc.
+4. **Chat with Agent** — Talk to your agent directly through PerkKite
+
+**Kite Portal** manages identity & payments → **PerkKite** customizes knowledge & provides chat UI.
 
 ---
 
-## Architecture
+## ✨ Features
 
-### System Overview
+- 🔐 **Wallet Connect** — RainbowKit + wagmi with Kite Testnet
+- 📚 **Knowledge Templates** — 6 categories: DeFi, NFT, Research, Security, Social, Governance
+- 🤖 **Agent Dashboard** — Manage multiple Kite agents per wallet
+- 💬 **Chat Interface** — Talk to your agents (coming soon)
+- 🔥 **Firebase Persistence** — Agents stored by wallet address
+- ⚡ **x402 Native** — Built for Kite's payment protocol
 
-```mermaid
-flowchart TB
-    subgraph Client["👤 User"]
-        Browser[Web Browser]
-    end
-    
-    subgraph PerkKite["🪁 PerkKite"]
-        Web[Next.js Frontend]
-        API[Express API]
-        SDK[Kite SDK]
-    end
-    
-    subgraph Kite["⛓️ Kite Chain"]
-        Passport[Agent Passport]
-        Chain[Kite L1]
-    end
-    
-    subgraph Storage["💾 Storage"]
-        Firestore[(Firestore)]
-    end
-    
-    Browser --> Web
-    Web --> API
-    API --> SDK
-    SDK --> Passport
-    Passport --> Chain
-    API --> Firestore
+---
+
+## 📦 Agent Templates
+
+| Template | Description | Price |
+|----------|-------------|-------|
+| 📈 **DeFi Trader** | Yield optimization, swaps, portfolio tracking | Free |
+| 🖼️ **NFT Collector** | Floor tracking, rarity analysis, marketplace | Free |
+| 🔬 **Research Analyst** | Protocol docs, tokenomics, market research | Free |
+| 🛡️ **Security Auditor** | Contract analysis, rug detection, risk scoring | 10 USDC |
+| 📱 **Social Manager** | Twitter monitoring, Farcaster, community | 5 USDC |
+| 🏛️ **DAO Delegate** | Governance proposals, voting, delegate tracking | 5 USDC |
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│    👤 User      │     │   🪁 PerkKite   │     │  🎫 Kite Portal │
+│   (Wallet)      │────▶│  (Templates +   │────▶│   (Identity +   │
+│                 │     │   Chat UI)      │     │    Payments)    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                               │                        │
+                               ▼                        ▼
+                        ┌─────────────────┐     ┌─────────────────┐
+                        │  🔥 Firebase    │     │  🤖 AI Agent    │
+                        │   (Agents +     │     │   (MCP Client)  │
+                        │   Knowledge)    │     │                 │
+                        └─────────────────┘     └─────────────────┘
 ```
 
-### Agent Creation Flow
+### x402 Payment Flow
 
-```mermaid
-sequenceDiagram
-    participant U as 👤 User
-    participant W as 🌐 Web App
-    participant A as 🔧 API
-    participant K as 🎫 Kite Passport
-    participant C as ⛓️ Kite Chain
-
-    U->>W: Connect Wallet
-    W->>A: POST /api/auth/verify
-    A-->>W: Session Token
-    
-    U->>W: Create Agent
-    W->>A: POST /api/agents
-    A->>K: Register Agent ID
-    K->>C: On-chain Registration
-    C-->>K: Agent ID
-    K-->>A: Registration Complete
-    A-->>W: Agent Created
-    W-->>U: Show Dashboard
 ```
-
-### Payment Flow (Kite Passport)
-
-```mermaid
-sequenceDiagram
-    participant U as 👤 User
-    participant W as 🌐 Web App
-    participant A as 🤖 Agent
-    participant P as 🎫 Passport
-    participant C as ⛓️ Kite Chain
-
-    U->>W: Create Session
-    W->>P: Sign Session Rules
-    P-->>W: Session ID
-    
-    Note over A: Agent needs to pay for service
-    
-    A->>P: kite.pay(amount, recipient)
-    P->>P: Validate against Session
-    P->>C: Execute Payment
-    C-->>P: TX Hash
-    P-->>A: Payment Complete
-    
-    U->>W: View Transaction History
-    W->>P: Get Delegations
-    P-->>W: Payment Records
-```
-
-### Identity Hierarchy
-
-```mermaid
-flowchart TB
-    subgraph User["👤 User (Root Authority)"]
-        UW[User Wallet<br/>Secure Enclave]
-    end
-    
-    subgraph Agent["🤖 Agent (Delegated)"]
-        AW[Agent Wallet<br/>BIP-32 Derived]
-    end
-    
-    subgraph Session["🔑 Session (Ephemeral)"]
-        SK[Session Key<br/>Random / Expiring]
-    end
-    
-    UW -->|derives| AW
-    AW -->|generates| SK
-    
-    UW -.->|"Signs governance<br/>rules only"| AW
-    AW -.->|"Bounded by<br/>user constraints"| SK
-    SK -.->|"Minimal risk<br/>if compromised"| Service[🛠️ Service]
+Agent Request → 402 Payment Required
+     ↓
+Agent checks Kite spending rules
+     ↓
+Kite signs X-PAYMENT header
+     ↓
+Agent retries with payment → 200 OK
+     ↓
+Facilitator settles on-chain (USDC)
 ```
 
 ---
 
-## Prerequisites
+## 🚀 Quick Start
 
-- **Node.js** 22+ 
-- **pnpm** 9+ (`npm install -g pnpm`)
+### Prerequisites
 
----
+- Node.js 22+
+- pnpm 9+ (`npm install -g pnpm`)
 
-## Quick Start
-
-### 1. Clone the repo
+### 1. Clone & Install
 
 ```bash
 git clone https://github.com/PerkOS-xyz/PerkKite.git
 cd PerkKite
-```
-
-### 2. Install dependencies
-
-```bash
 pnpm install
 ```
 
-### 3. Set up environment
+### 2. Environment Setup
 
 ```bash
 cp .env.example .env.local
 ```
 
-Edit `.env.local` with your credentials:
+Required env vars (set in Netlify for production):
 
 ```env
-# Kite Chain
-NEXT_PUBLIC_KITE_RPC_URL=https://rpc.testnet.gokite.ai
-NEXT_PUBLIC_KITE_CHAIN_ID=2368
+# Firebase
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
 
-# Kite Agent Passport (get from https://gokite.ai)
-KITE_API_KEY=your_kite_api_key
-KITE_API_URL=https://api.gokite.ai
-
-# WalletConnect (get from https://cloud.walletconnect.com)
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
-
-# API
-API_PORT=3001
+# Kite
+KITE_CLIENT_ID=your_client_agent_id
+KITE_MCP_URL=https://neo.dev.gokite.ai/v1/mcp
 ```
 
-### 4. Run development servers
+### 3. Run Development
 
 ```bash
-# Run all apps (web + api)
 pnpm dev
-
-# Or run individually:
-pnpm web   # Frontend only (http://localhost:3000)
-pnpm api   # Backend only (http://localhost:3001)
 ```
 
-### 5. Open the app
-
-- **Frontend:** http://localhost:3000
-- **API:** http://localhost:3001/health
+Open http://localhost:3000
 
 ---
 
-## Available Scripts
-
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start all apps in dev mode |
-| `pnpm build` | Build all apps for production |
-| `pnpm web` | Start frontend only |
-| `pnpm api` | Start backend only |
-| `pnpm lint` | Run ESLint |
-| `pnpm clean` | Clean build artifacts |
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```
-perkkite/
+PerkKite/
 ├── apps/
-│   ├── web/           # Next.js 15 frontend
-│   │   ├── src/app/   # Pages (App Router)
-│   │   └── ...
-│   └── api/           # Express backend
-│       ├── src/routes/  # API endpoints
-│       └── ...
+│   ├── web/                 # Next.js 15 frontend
+│   │   ├── src/app/         # Pages (App Router)
+│   │   ├── src/components/  # React components
+│   │   └── src/lib/         # Firebase, agents
+│   └── api/                 # Express backend (x402)
 ├── packages/
-│   ├── shared/        # Shared types & constants
-│   └── kite-sdk/      # Kite Passport SDK wrapper
-└── docs/              # Documentation
+│   ├── shared/              # Types & constants
+│   └── kite-sdk/            # Kite x402 SDK
+└── README.md
 ```
 
 ---
 
-## API Endpoints
+## 🔗 Links
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/auth/verify` | Verify wallet signature |
-| POST | `/api/auth/session` | Create auth session |
-| GET | `/api/agents` | List agents |
-| POST | `/api/agents` | Create agent |
-| GET | `/api/sessions` | List Passport sessions |
-| POST | `/api/sessions` | Create Passport session |
+| Resource | URL |
+|----------|-----|
+| **Live App** | https://perkkite.netlify.app |
+| **Kite Portal** | https://x402-portal-eight.vercel.app |
+| **Kite Docs** | https://docs.gokite.ai/kite-agent-passport |
+| **PerkOS** | https://perkos.xyz |
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 - **Frontend:** Next.js 15, React 19, Tailwind CSS
-- **Backend:** Express, TypeScript
-- **Auth:** RainbowKit + wagmi (coming soon)
+- **Auth:** RainbowKit + wagmi
 - **Database:** Firebase Firestore
-- **Payments:** Kite Agent Passport
+- **Payments:** Kite Agent Passport + x402
+- **Deploy:** Netlify
 
 ---
 
-## Links
+## 📄 License
 
-- [Kite Docs](https://docs.gokite.ai)
-- [Kite Agent Passport](https://docs.gokite.ai/kite-agent-passport)
-- [PerkOS](https://perkos.xyz)
+MIT
 
 ---
 
-Built for ETH Denver 2026 🏔️ — Powered by PerkOS × Kite
+<div align="center">
+
+Built for **ETH Denver 2026** 🏔️
+
+Powered by [PerkOS](https://perkos.xyz) × [Kite](https://gokite.ai)
+
+</div>
