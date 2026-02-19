@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { RUNTIMES, type RuntimeType } from '@perkkite/shared';
 
+// Kite Portal URL for real agent creation
+const KITE_PORTAL_URL = 'https://x402-portal-eight.vercel.app/';
+
 export default function NewAgentPage() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -10,7 +13,7 @@ export default function NewAgentPage() {
     description: '',
     category: 'general',
     runtimeType: 'nano-claw' as RuntimeType,
-    dailyBudget: '100',
+    dailyBudget: '5',
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -18,25 +21,12 @@ export default function NewAgentPage() {
     e.preventDefault();
     setIsLoading(true);
     
-    try {
-      // TODO: Connect wallet and get address
-      const response = await fetch('/api/agents', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-wallet-address': '0xDemoAddress', // Replace with actual wallet
-        },
-        body: JSON.stringify(formData),
-      });
-      
-      const data = await response.json();
-      console.log('Agent created:', data);
-      setStep(4); // Success step
-    } catch (error) {
-      console.error('Error creating agent:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    // Simulate creation delay
+    await new Promise(r => setTimeout(r, 1500));
+    
+    // For MVP: Show success and redirect to Kite Portal
+    setStep(4);
+    setIsLoading(false);
   };
 
   return (
@@ -103,7 +93,8 @@ export default function NewAgentPage() {
             <button
               type="button"
               onClick={() => setStep(2)}
-              className="w-full p-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
+              disabled={!formData.name || !formData.description}
+              className="w-full p-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition disabled:opacity-50"
             >
               Next: Select Runtime
             </button>
@@ -218,15 +209,46 @@ export default function NewAgentPage() {
         {/* Step 4: Success */}
         {step === 4 && (
           <div className="text-center space-y-6">
-            <div className="text-6xl">🎉</div>
-            <h2 className="text-2xl font-semibold">Agent Created!</h2>
+            <div className="text-6xl">🪁</div>
+            <h2 className="text-2xl font-semibold">Agent Ready!</h2>
             <p className="text-gray-400">
-              Your agent <strong>{formData.name}</strong> is ready to be deployed.
+              Your agent <strong className="text-white">{formData.name}</strong> configuration is ready.
             </p>
-            <div className="flex gap-4 justify-center">
+            
+            <div className="p-4 bg-gray-900 rounded-lg border border-gray-700 text-left">
+              <h3 className="font-medium mb-3">📋 Agent Summary</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Name:</span>
+                  <span>{formData.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Category:</span>
+                  <span className="capitalize">{formData.category}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Runtime:</span>
+                  <span>{RUNTIMES[formData.runtimeType]?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Daily Budget:</span>
+                  <span>{formData.dailyBudget} USDC</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <a
+                href={KITE_PORTAL_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full px-6 py-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
+              >
+                Complete Setup in Kite Portal →
+              </a>
               <a
                 href="/dashboard"
-                className="px-6 py-3 bg-kite-primary hover:bg-kite-secondary rounded-lg font-medium transition"
+                className="block w-full px-6 py-3 border border-gray-700 hover:border-gray-500 rounded-lg font-medium transition"
               >
                 Go to Dashboard
               </a>
