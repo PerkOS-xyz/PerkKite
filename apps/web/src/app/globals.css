@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --kite-primary: #7C3AED;
+  --kite-secondary: #A78BFA;
+  --perkos-pink: #EB1B69;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+}
