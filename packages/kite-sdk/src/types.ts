@@ -1,9 +1,19 @@
 export interface KiteConfig {
-  apiKey: string;
-  apiUrl: string;
-  chainId: number;
-  rpcUrl: string;
-  bundlerUrl: string;
+  // Kite MCP
+  mcpUrl?: string;
+  clientId?: string;
+  
+  // x402 Facilitator
+  facilitatorUrl?: string;
+  
+  // Chain config (optional, defaults to testnet)
+  chainId?: number;
+  rpcUrl?: string;
+  
+  // Legacy (for backwards compat)
+  apiKey?: string;
+  apiUrl?: string;
+  bundlerUrl?: string;
 }
 
 export interface PassportSession {
@@ -28,7 +38,7 @@ export interface AgentRegistration {
   agentId: string;
   name: string;
   walletAddress: string;
-  aaWalletAddress: string;
+  aaWalletAddress?: string;
   vaultAddress?: string;
   registeredAt: string;
 }
