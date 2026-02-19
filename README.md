@@ -53,33 +53,95 @@ PerkKite is a **Knowledge Marketplace** for AI agents on Kite Agent Passport. It
 
 ## 🏗️ Architecture
 
+### System Overview
+
+```mermaid
+flowchart TB
+    subgraph User["👤 User"]
+        Wallet[Wallet]
+    end
+    
+    subgraph PerkKite["🪁 PerkKite"]
+        Web[Next.js App]
+        Templates[Knowledge Templates]
+        Chat[Chat Interface]
+    end
+    
+    subgraph Kite["🎫 Kite Portal"]
+        Passport[Agent Passport]
+        MCP[MCP Server]
+    end
+    
+    subgraph Storage["💾 Storage"]
+        Firebase[(Firebase)]
+    end
+    
+    subgraph Agent["🤖 AI Agent"]
+        Claude[Claude/Cursor]
+    end
+    
+    Wallet --> Web
+    Web --> Templates
+    Web --> Chat
+    Web --> Firebase
+    Web -.->|Client ID| Passport
+    Passport --> MCP
+    MCP --> Claude
+    Chat -.->|future| Claude
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    👤 User      │     │   🪁 PerkKite   │     │  🎫 Kite Portal │
-│   (Wallet)      │────▶│  (Templates +   │────▶│   (Identity +   │
-│                 │     │   Chat UI)      │     │    Payments)    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                               │                        │
-                               ▼                        ▼
-                        ┌─────────────────┐     ┌─────────────────┐
-                        │  🔥 Firebase    │     │  🤖 AI Agent    │
-                        │   (Agents +     │     │   (MCP Client)  │
-                        │   Knowledge)    │     │                 │
-                        └─────────────────┘     └─────────────────┘
+
+### User Flow
+
+```mermaid
+sequenceDiagram
+    participant U as 👤 User
+    participant P as 🪁 PerkKite
+    participant K as 🎫 Kite Portal
+    participant F as 🔥 Firebase
+    participant A as 🤖 Agent
+
+    U->>P: Connect Wallet
+    U->>P: Select Template
+    P->>U: Open Wizard
+    
+    U->>K: Create Agent (external)
+    K-->>U: Client ID
+    
+    U->>P: Paste Client ID
+    P->>F: Save Agent + Template
+    F-->>P: Saved
+    
+    U->>P: Chat with Agent
+    P->>A: Send Message (via MCP)
+    A-->>P: Response
+    P-->>U: Display Response
 ```
 
 ### x402 Payment Flow
 
-```
-Agent Request → 402 Payment Required
-     ↓
-Agent checks Kite spending rules
-     ↓
-Kite signs X-PAYMENT header
-     ↓
-Agent retries with payment → 200 OK
-     ↓
-Facilitator settles on-chain (USDC)
+```mermaid
+sequenceDiagram
+    participant A as 🤖 Agent
+    participant S as 🌐 x402 Service
+    participant K as 🎫 Kite Passport
+    participant F as 💰 Facilitator
+    participant C as ⛓️ Chain
+
+    A->>S: Request Service
+    S-->>A: 402 Payment Required
+    
+    A->>K: Check Spending Rules
+    K-->>A: Within Budget ✓
+    
+    A->>K: Sign Payment
+    K-->>A: X-PAYMENT Header
+    
+    A->>S: Retry with X-PAYMENT
+    S->>F: Verify + Settle
+    F->>C: Transfer USDC
+    C-->>F: TX Hash
+    F-->>S: Payment Confirmed
+    S-->>A: 200 OK + Response
 ```
 
 ---
