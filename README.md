@@ -23,6 +23,116 @@
 
 ---
 
+## Architecture
+
+### System Overview
+
+```mermaid
+flowchart TB
+    subgraph Client["👤 User"]
+        Browser[Web Browser]
+    end
+    
+    subgraph PerkKite["🪁 PerkKite"]
+        Web[Next.js Frontend]
+        API[Express API]
+        SDK[Kite SDK]
+    end
+    
+    subgraph Kite["⛓️ Kite Chain"]
+        Passport[Agent Passport]
+        Chain[Kite L1]
+    end
+    
+    subgraph Storage["💾 Storage"]
+        Firestore[(Firestore)]
+    end
+    
+    Browser --> Web
+    Web --> API
+    API --> SDK
+    SDK --> Passport
+    Passport --> Chain
+    API --> Firestore
+```
+
+### Agent Creation Flow
+
+```mermaid
+sequenceDiagram
+    participant U as 👤 User
+    participant W as 🌐 Web App
+    participant A as 🔧 API
+    participant K as 🎫 Kite Passport
+    participant C as ⛓️ Kite Chain
+
+    U->>W: Connect Wallet
+    W->>A: POST /api/auth/verify
+    A-->>W: Session Token
+    
+    U->>W: Create Agent
+    W->>A: POST /api/agents
+    A->>K: Register Agent ID
+    K->>C: On-chain Registration
+    C-->>K: Agent ID
+    K-->>A: Registration Complete
+    A-->>W: Agent Created
+    W-->>U: Show Dashboard
+```
+
+### Payment Flow (Kite Passport)
+
+```mermaid
+sequenceDiagram
+    participant U as 👤 User
+    participant W as 🌐 Web App
+    participant A as 🤖 Agent
+    participant P as 🎫 Passport
+    participant C as ⛓️ Kite Chain
+
+    U->>W: Create Session
+    W->>P: Sign Session Rules
+    P-->>W: Session ID
+    
+    Note over A: Agent needs to pay for service
+    
+    A->>P: kite.pay(amount, recipient)
+    P->>P: Validate against Session
+    P->>C: Execute Payment
+    C-->>P: TX Hash
+    P-->>A: Payment Complete
+    
+    U->>W: View Transaction History
+    W->>P: Get Delegations
+    P-->>W: Payment Records
+```
+
+### Identity Hierarchy
+
+```mermaid
+flowchart TB
+    subgraph User["👤 User (Root Authority)"]
+        UW[User Wallet<br/>Secure Enclave]
+    end
+    
+    subgraph Agent["🤖 Agent (Delegated)"]
+        AW[Agent Wallet<br/>BIP-32 Derived]
+    end
+    
+    subgraph Session["🔑 Session (Ephemeral)"]
+        SK[Session Key<br/>Random / Expiring]
+    end
+    
+    UW -->|derives| AW
+    AW -->|generates| SK
+    
+    UW -.->|"Signs governance<br/>rules only"| AW
+    AW -.->|"Bounded by<br/>user constraints"| SK
+    SK -.->|"Minimal risk<br/>if compromised"| Service[🛠️ Service]
+```
+
+---
+
 ## Prerequisites
 
 - **Node.js** 22+ 
