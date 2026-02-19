@@ -157,7 +157,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex gap-2">
                   <Link
-                    href={`/chat/${agent.id}`}
+                    href={`/chat?agent=${agent.id}`}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition"
                   >
                     💬 Chat

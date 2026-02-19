@@ -21,6 +21,9 @@ export function Navbar() {
           <Link href="/marketplace" className="text-gray-400 hover:text-white transition">
             Marketplace
           </Link>
+          <Link href="/chat" className="text-gray-400 hover:text-white transition">
+            Chat
+          </Link>
           <ConnectButton />
         </div>
       </div>

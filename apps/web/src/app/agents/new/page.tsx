@@ -62,11 +62,14 @@ function NewAgentContent() {
     }
   }, [searchParams]);
 
+  const [error, setError] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address || !formData.name || !formData.clientId) return;
     
     setIsLoading(true);
+    setError(null);
     
     try {
       await addAgent({
@@ -79,8 +82,9 @@ function NewAgentContent() {
       });
       
       setStep(4);
-    } catch (error) {
-      console.error('Error creating agent:', error);
+    } catch (err) {
+      console.error('Error creating agent:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save agent. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -276,6 +280,12 @@ function NewAgentContent() {
                 PerkKite adds knowledge customization and a chat interface.
               </p>
             </div>
+
+            {error && (
+              <div className="p-4 bg-red-900/20 border border-red-800 rounded-lg">
+                <p className="text-sm text-red-400">❌ {error}</p>
+              </div>
+            )}
 
             <div className="flex gap-4">
               <button
