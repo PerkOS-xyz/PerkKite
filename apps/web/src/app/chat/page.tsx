@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter, useSearchParams } from 'next/navigation';
-import OpenAI from 'openai';
 
 interface Message {
   id: string;
@@ -117,54 +116,26 @@ function ChatContent() {
     setError(null);
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-      
-      if (!apiKey || apiKey === 'your_openai_api_key') {
-        // Demo mode - simulate response
-        setTimeout(() => {
-          const responses = [
-            `I understand your request. As a ${template.replace(/-/g, ' ')} agent, I can help with that. Let me analyze the situation...`,
-            "I've checked the relevant data. Based on my analysis, here's what I found...",
-            "This would require an x402 payment of approximately 0.01 USDC. Your current daily budget allows for this transaction. Shall I proceed?",
-            "I'm querying the Kite network for the latest information. One moment...",
-            "Based on my knowledge and current market conditions, I recommend the following approach...",
-          ];
-          
-          const assistantMessage: Message = {
-            id: `assistant_${Date.now()}`,
-            role: 'assistant',
-            content: responses[Math.floor(Math.random() * responses.length)],
-            timestamp: new Date(),
-          };
-          
-          setMessages((prev) => [...prev, assistantMessage]);
-          setIsLoading(false);
-        }, 1500);
-        return;
-      }
-
-      const openai = new OpenAI({
-        apiKey,
-        dangerouslyAllowBrowser: true, // For demo - in production use backend
-      });
-
       const systemPrompt = SYSTEM_PROMPTS[template] || SYSTEM_PROMPTS['default'];
       
-      const chatMessages = [
-        { role: 'system' as const, content: systemPrompt },
-        ...messages
-          .filter(m => m.role !== 'system' && m.id !== 'welcome')
-          .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-        { role: 'user' as const, content: userMessage.content }
-      ];
+      const chatMessages = messages
+        .filter(m => m.role !== 'system' && m.id !== 'welcome')
+        .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      chatMessages.push({ role: 'user', content: userMessage.content });
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: chatMessages,
-        max_tokens: 500,
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: chatMessages, systemPrompt }),
       });
 
-      const assistantContent = response.choices[0]?.message?.content || "I apologize, I couldn't generate a response.";
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get response');
+      }
+
+      const assistantContent = data.reply || "I apologize, I couldn't generate a response.";
       
       const assistantMessage: Message = {
         id: `assistant_${Date.now()}`,
