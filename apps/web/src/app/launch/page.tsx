@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { DeploymentStep, LaunchedAgent } from '@/lib/launched-agents';
 
@@ -27,6 +27,7 @@ const AWS_REGIONS = [
 export default function LaunchPage() {
   const { address, isConnected } = useAccount();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [step, setStep] = useState(1);
 
@@ -50,6 +51,14 @@ export default function LaunchPage() {
   const [deploymentStatus, setDeploymentStatus] = useState<LaunchedAgent | null>(null);
   const [deploying, setDeploying] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Pre-fill from URL params (coming from dashboard)
+  useEffect(() => {
+    const paramClientId = searchParams.get('clientId');
+    const paramName = searchParams.get('name');
+    if (paramClientId) setClientId(paramClientId);
+    if (paramName) setAgentName(paramName);
+  }, [searchParams]);
 
   // Pre-fill name from template
   useEffect(() => {

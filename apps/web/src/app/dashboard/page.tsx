@@ -382,12 +382,20 @@ function DashboardContent() {
                   </div>
                   <div className="flex gap-2">
                     {!isRevoked && (
-                      <Link
-                        href={`/chat?agent=${agent.clientId}&template=${agent.knowledge?.[0] || 'default'}${agent.mcpAccessToken ? `&token=${encodeURIComponent(agent.mcpAccessToken)}` : ''}`}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition"
-                      >
-                        Chat
-                      </Link>
+                      <>
+                        <Link
+                          href={`/chat?agent=${agent.clientId}&template=${agent.knowledge?.[0] || 'default'}${agent.mcpAccessToken ? `&token=${encodeURIComponent(agent.mcpAccessToken)}` : ''}`}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition"
+                        >
+                          Chat
+                        </Link>
+                        <Link
+                          href={`/launch?clientId=${encodeURIComponent(agent.clientId)}&name=${encodeURIComponent(agent.name)}`}
+                          className="px-4 py-2 bg-kite-primary hover:bg-kite-primary/80 rounded-lg text-sm font-medium transition"
+                        >
+                          🚀 Launch on AWS
+                        </Link>
+                      </>
                     )}
                     <button
                       onClick={() => handleDeleteAgent(agent.id!)}
