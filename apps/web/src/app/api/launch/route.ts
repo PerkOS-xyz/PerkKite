@@ -294,6 +294,9 @@ Execute all steps now. Report back when complete.`;
   });
 
   try {
+    // TODO: Connect to real orchestrator when WebSocket API is ready
+    // For now, use simulation for demo
+    throw new Error('Orchestrator integration pending — using simulation');
     // Send deployment task to orchestrator
     const response = await sendToOrchestrator(deploymentPrompt);
 
