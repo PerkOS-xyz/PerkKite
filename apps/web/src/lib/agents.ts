@@ -41,8 +41,12 @@ export async function getAgentsByWallet(walletAddress: string): Promise<Agent[]>
 }
 
 export async function addAgent(agent: Omit<Agent, 'id'>): Promise<string> {
+  // Remove undefined fields (Firebase doesn't accept them)
+  const cleaned = Object.fromEntries(
+    Object.entries(agent).filter(([, v]) => v !== undefined)
+  );
   const docRef = await addDoc(collection(db, AGENTS_COLLECTION), {
-    ...agent,
+    ...cleaned,
     walletAddress: agent.walletAddress.toLowerCase(),
     createdAt: Timestamp.now(),
   });
