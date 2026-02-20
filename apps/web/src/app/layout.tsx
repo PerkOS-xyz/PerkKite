@@ -3,6 +3,8 @@ import './globals.css';
 import { Providers } from './providers';
 import { Navbar } from '@/components/Navbar';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'PerkKite - Spark for Kite',
   description: 'Launch AI agents with Kite Agent Passport',
