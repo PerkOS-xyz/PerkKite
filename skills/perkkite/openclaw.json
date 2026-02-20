@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openclaw.ai/schemas/config.json",
+  "name": "PerkKite Agent",
+  "description": "Autonomous DeFi agent with Kite Agent Passport, x402 payments, and Uniswap Trading API",
+  "skills": {
+    "entries": {
+      "perkkite": {
+        "enabled": true
+      }
+    }
+  },
+  "mcpServers": {
+    "perkkite-mcp": {
+      "url": "${PERKKITE_API_URL}/api/mcp",
+      "headers": {
+        "X-Agent-Id": "${PERKKITE_AGENT_ID}"
+      }
+    }
+  }
+}

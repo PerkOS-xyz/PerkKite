@@ -83,6 +83,64 @@ const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_swap_quote',
+      description: 'Get a real-time swap quote from Uniswap Trading API. Returns the current exchange rate and estimated output for a token swap. Supports Ethereum mainnet, Base, Polygon, Arbitrum, and 25+ chains. Use token symbols like ETH, USDC, WETH, UNI, WBTC, DAI, or pass a token contract address directly.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tokenIn: {
+            type: 'string',
+            description: 'Input token symbol (e.g. "ETH", "USDC", "UNI") or contract address (0x...)',
+          },
+          tokenOut: {
+            type: 'string',
+            description: 'Output token symbol (e.g. "USDC", "WETH", "DAI") or contract address (0x...)',
+          },
+          amount: {
+            type: 'string',
+            description: 'Amount of input token in its smallest unit (wei for ETH, 6-decimal for USDC). For example: "1000000000000000000" for 1 ETH, "1000000" for 1 USDC.',
+          },
+          chainId: {
+            type: 'number',
+            description: 'Chain ID for the swap. Default: 1 (Ethereum mainnet). Other options: 8453 (Base), 137 (Polygon), 42161 (Arbitrum), 10 (Optimism).',
+          },
+        },
+        required: ['tokenIn', 'tokenOut', 'amount'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'execute_swap',
+      description: 'Execute a token swap via Uniswap Trading API with x402 payment authorization on Kite. This is a two-step process: 1) Get a live quote from Uniswap, 2) Authorize the swap service fee via x402 payment on Kite chain. The agent discovers cross-chain swap prices via Uniswap and settles the service fee on Kite -- fully autonomous cross-chain DeFi.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tokenIn: {
+            type: 'string',
+            description: 'Input token symbol (e.g. "ETH", "USDC") or contract address',
+          },
+          tokenOut: {
+            type: 'string',
+            description: 'Output token symbol (e.g. "USDC", "DAI") or contract address',
+          },
+          amount: {
+            type: 'string',
+            description: 'Amount of input token in smallest unit (wei for ETH, etc.)',
+          },
+          chainId: {
+            type: 'number',
+            description: 'Chain ID (default: 1 for Ethereum mainnet)',
+          },
+        },
+        required: ['tokenIn', 'tokenOut', 'amount'],
+      },
+    },
+  },
 ];
 
 interface ActionLog {
@@ -383,6 +441,168 @@ async function executeTool(
       };
     }
 
+    case 'get_swap_quote': {
+      const { tokenIn, tokenOut, amount, chainId = 1 } = args as {
+        tokenIn: string;
+        tokenOut: string;
+        amount: string;
+        chainId?: number;
+      };
+
+      const chainName = chainId === 1 ? 'Ethereum' : chainId === 8453 ? 'Base' : chainId === 137 ? 'Polygon' : chainId === 42161 ? 'Arbitrum' : chainId === 10 ? 'Optimism' : `Chain ${chainId}`;
+
+      try {
+        const baseUrl = getBaseUrl();
+        const quoteRes = await fetch(`${baseUrl}/api/uniswap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'quote', tokenIn, tokenOut, amount, chainId }),
+        });
+
+        if (!quoteRes.ok) {
+          const errData = await quoteRes.json().catch(() => ({}));
+          const result = {
+            success: false,
+            error: `Uniswap API returned ${quoteRes.status}`,
+            details: (errData as Record<string, string>).details || (errData as Record<string, string>).error || 'Unknown error',
+            tokenIn, tokenOut, amount, chainId, chainName,
+          };
+          return { result, action: { tool: toolName, args, result, timestamp } };
+        }
+
+        const quoteData = await quoteRes.json();
+        const result = {
+          success: true,
+          quote: {
+            tokenIn,
+            tokenOut,
+            amountIn: amount,
+            amountOut: quoteData.quote?.output?.amount || quoteData.output?.amount || quoteData.amountOut || 'N/A',
+            chainId,
+            chainName,
+            gasFeeEstimate: quoteData.quote?.gasFee || quoteData.gasFee || 'N/A',
+            routingPreference: quoteData.routing || 'CLASSIC',
+          },
+          rawQuote: quoteData,
+          source: 'Uniswap Trading API',
+          note: 'Live quote from Uniswap Trading API. Prices update in real-time.',
+        };
+        return { result, action: { tool: toolName, args, result, timestamp } };
+      } catch (error) {
+        const result = {
+          success: false,
+          error: `Failed to fetch Uniswap quote: ${String(error)}`,
+          tokenIn, tokenOut, amount, chainId, chainName,
+        };
+        return { result, action: { tool: toolName, args, result, timestamp } };
+      }
+    }
+
+    case 'execute_swap': {
+      const { tokenIn, tokenOut, amount, chainId = 1 } = args as {
+        tokenIn: string;
+        tokenOut: string;
+        amount: string;
+        chainId?: number;
+      };
+
+      const chainName = chainId === 1 ? 'Ethereum' : chainId === 8453 ? 'Base' : chainId === 137 ? 'Polygon' : chainId === 42161 ? 'Arbitrum' : chainId === 10 ? 'Optimism' : `Chain ${chainId}`;
+
+      // Step 1: Get live quote from Uniswap
+      let quoteData: Record<string, unknown> | null = null;
+      let step1Status: string;
+      try {
+        const baseUrl = getBaseUrl();
+        const quoteRes = await fetch(`${baseUrl}/api/uniswap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'quote', tokenIn, tokenOut, amount, chainId }),
+        });
+
+        if (quoteRes.ok) {
+          quoteData = await quoteRes.json();
+          step1Status = `Fetched live quote from Uniswap on ${chainName}: ${tokenIn} -> ${tokenOut}`;
+        } else {
+          const errData = await quoteRes.json().catch(() => ({}));
+          step1Status = `Uniswap quote failed (${quoteRes.status}): ${(errData as Record<string, string>).error || 'unknown error'}`;
+        }
+      } catch (error) {
+        step1Status = `Failed to reach Uniswap API: ${String(error)}`;
+      }
+
+      if (!quoteData) {
+        const result = {
+          success: false,
+          service: 'Uniswap Swap',
+          swapFlow: { step1: step1Status, step2: 'Skipped (no quote available)', step3: 'Skipped' },
+          tokenIn, tokenOut, amount, chainId, chainName,
+        };
+        return { result, action: { tool: toolName, args, result, timestamp } };
+      }
+
+      const amountOut = quoteData.quote
+        ? ((quoteData.quote as Record<string, unknown>).output as Record<string, unknown>)?.amount || 'N/A'
+        : quoteData.amountOut || 'N/A';
+
+      // Step 2: Authorize swap service fee via x402 on Kite
+      const swapServiceFee = '1.00';
+      const swapServiceRecipient = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0';
+      let txHash: string | undefined;
+      let paymentError: string | null = null;
+      let step2Status: string;
+
+      try {
+        const mcpResult = await callMCPTool(agentId, 'approve_payment', {
+          amount: swapServiceFee,
+          recipient: swapServiceRecipient,
+        }, accessToken);
+        txHash = (mcpResult as { txHash?: string })?.txHash;
+        step2Status = `Approved ${swapServiceFee} USDC swap service fee via x402 on Kite (gasless)`;
+      } catch (error) {
+        paymentError = String(error);
+        step2Status = `Payment authorization failed: ${paymentError}`;
+      }
+
+      // Step 3: Summary
+      const step3Status = txHash
+        ? `Swap authorized. In production, the signed order would be submitted to Uniswap for on-chain execution on ${chainName}.`
+        : 'Swap not submitted (payment authorization pending).';
+
+      const result = {
+        success: !!quoteData && !paymentError,
+        service: 'Uniswap Swap',
+        swap: {
+          tokenIn, tokenOut, amountIn: amount, amountOut: String(amountOut),
+          chainId, chainName, source: 'Uniswap Trading API',
+        },
+        swapFlow: { step1: step1Status, step2: step2Status, step3: step3Status },
+        payment: {
+          amount: `${swapServiceFee} USDC`,
+          recipient: swapServiceRecipient,
+          txHash: txHash || 'pending',
+          gasless: true,
+          chain: 'Kite Testnet',
+          explorerUrl: txHash ? `${KITE_EXPLORER}/tx/${txHash}` : null,
+          note: 'Service fee settled on Kite via x402. Swap execution would occur on target chain.',
+        },
+        crossChain: {
+          priceDiscovery: chainName,
+          settlement: 'Kite Testnet',
+          narrative: 'AI agent discovers best swap price via Uniswap API, then pays for swap execution using x402 + Kite Agent Passport',
+        },
+        ...(paymentError ? { paymentError } : {}),
+      };
+
+      return {
+        result,
+        action: {
+          tool: toolName, args, result, timestamp,
+          txHash: txHash || undefined,
+          explorerUrl: txHash ? `${KITE_EXPLORER}/tx/${txHash}` : undefined,
+        },
+      };
+    }
+
     default: {
       const result = { error: `Unknown tool: ${toolName}` };
       return { result, action: { tool: toolName, args, result, timestamp } };
@@ -415,10 +635,15 @@ export async function POST(request: NextRequest) {
 - check_spending_rules: View your vault's spending limits
 - get_vault_balance: Check your vault balance
 - pay_for_service: Access paid services via x402 protocol
+- get_swap_quote: Get real-time swap quotes from Uniswap Trading API (supports ETH, USDC, UNI, WBTC, DAI and any ERC-20 on Ethereum, Base, Polygon, Arbitrum, Optimism)
+- execute_swap: Execute a token swap via Uniswap + x402 payment on Kite (cross-chain autonomous DeFi)
 
 When users ask about your identity, capabilities, or want to perform actions, USE YOUR TOOLS proactively. Don't just describe what you could do - actually do it.
 When making payments, always confirm the amount and recipient, then use approve_payment.
 When accessing paid services, use pay_for_service to handle the full x402 flow autonomously.
+When users ask about token swaps, DEX trading, or token prices, use get_swap_quote to fetch real-time pricing from Uniswap.
+For swap amounts, help convert human-readable amounts to smallest units: 1 ETH = 1000000000000000000, 1 USDC = 1000000.
+When users want to execute a swap, use execute_swap which combines Uniswap pricing with x402 payment authorization on Kite.
 All your transactions are gasless (paid by Kite Bundler) and settled on Kite Testnet (Chain ID: 2368).
 Agent ID: ${agentId || 'not configured'}`;
 

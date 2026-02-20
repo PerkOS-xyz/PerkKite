@@ -71,21 +71,24 @@ const TEMPLATE_CONFIG: Record<string, { icon: string; name: string; systemPrompt
 
 function ActionCard({ action }: { action: ActionLog }) {
   const isPayment = action.tool === 'approve_payment' || action.tool === 'pay_for_service';
+  const isSwap = action.tool === 'get_swap_quote' || action.tool === 'execute_swap';
   const isIdentity = action.tool === 'get_agent_identity';
   const result = action.result as Record<string, unknown>;
 
   return (
     <div className={`border rounded-lg p-3 text-xs ${
       isPayment ? 'border-green-700 bg-green-900/20' :
+      isSwap ? 'border-orange-700 bg-orange-900/20' :
       isIdentity ? 'border-purple-700 bg-purple-900/20' :
       'border-gray-700 bg-gray-800/50'
     }`}>
       <div className="flex items-center gap-2 mb-2">
         <span className={`w-2 h-2 rounded-full ${
-          isPayment ? 'bg-green-400' : isIdentity ? 'bg-purple-400' : 'bg-blue-400'
+          isPayment ? 'bg-green-400' : isSwap ? 'bg-orange-400' : isIdentity ? 'bg-purple-400' : 'bg-blue-400'
         }`} />
         <span className="font-medium text-gray-300">
           {isPayment ? 'x402 Payment' :
+           isSwap ? 'Uniswap Swap' :
            isIdentity ? 'Identity Verification' :
            action.tool.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
         </span>
@@ -116,6 +119,54 @@ function ActionCard({ action }: { action: ActionLog }) {
         </div>
       )}
 
+      {isSwap && (
+        <div className="space-y-1 text-gray-400">
+          {!!(result?.quote || result?.swap) && (
+            <div className="flex items-center gap-2">
+              <span className="text-white font-medium">
+                {String((result?.quote as Record<string, unknown>)?.tokenIn || (result?.swap as Record<string, unknown>)?.tokenIn || '')}
+              </span>
+              <span className="text-orange-400">&rarr;</span>
+              <span className="text-white font-medium">
+                {String((result?.quote as Record<string, unknown>)?.tokenOut || (result?.swap as Record<string, unknown>)?.tokenOut || '')}
+              </span>
+              <span className="px-1.5 py-0.5 bg-orange-900/30 text-orange-300 rounded text-[10px]">
+                {String((result?.quote as Record<string, unknown>)?.chainName || (result?.swap as Record<string, unknown>)?.chainName || 'Ethereum')}
+              </span>
+            </div>
+          )}
+          {!!(result?.quote as Record<string, unknown>)?.amountOut && (
+            <div>Output: <span className="text-white font-mono">{String((result.quote as Record<string, unknown>).amountOut)}</span></div>
+          )}
+          {!!(result?.swap as Record<string, unknown>)?.amountOut && (
+            <div>Est. Output: <span className="text-white font-mono">{String((result.swap as Record<string, unknown>).amountOut)}</span></div>
+          )}
+          {!!result?.swapFlow && (
+            <div className="mt-2 space-y-0.5 text-[10px]">
+              {Object.entries(result.swapFlow as Record<string, string>).map(([key, step], i) => (
+                <div key={key} className="flex items-start gap-1">
+                  <span className="text-orange-400 shrink-0">Step {i + 1}:</span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {!!(result?.payment as Record<string, unknown>)?.amount && (
+            <div className="mt-1 pt-1 border-t border-orange-900/30">
+              <span className="text-orange-300">Service Fee:</span>{' '}
+              <span className="text-white">{String((result.payment as Record<string, unknown>).amount)}</span>
+              <span className="text-gray-500 ml-2">on {String((result.payment as Record<string, unknown>).chain || 'Kite')}</span>
+            </div>
+          )}
+          {!!(result?.crossChain as Record<string, unknown>)?.narrative && (
+            <div className="mt-1 text-[10px] text-orange-300/70 italic">
+              {String((result.crossChain as Record<string, unknown>).narrative)}
+            </div>
+          )}
+          <div className="text-[10px] text-gray-600">Source: Uniswap Trading API</div>
+        </div>
+      )}
+
       {isIdentity && (
         <div className="space-y-1 text-gray-400">
           {!!result?.payerAddress && (
@@ -126,7 +177,7 @@ function ActionCard({ action }: { action: ActionLog }) {
         </div>
       )}
 
-      {!isPayment && !isIdentity && !!result?.tools && (
+      {!isPayment && !isIdentity && !isSwap && !!result?.tools && (
         <div className="text-gray-400">
           Tools: <span className="text-white">{String((result.tools as unknown[]).length)} available</span>
         </div>
@@ -140,7 +191,7 @@ function ActionCard({ action }: { action: ActionLog }) {
             rel="noopener noreferrer"
             className="text-kite-secondary hover:text-kite-primary transition flex items-center gap-1"
           >
-            View on Explorer →
+            View on Explorer &rarr;
             <span className="font-mono">{action.txHash.slice(0, 10)}...</span>
           </a>
         </div>
@@ -271,7 +322,7 @@ function ChatContent() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: `Hello! I'm your ${name} Agent, powered by Kite Agent Passport.\n\nI can authenticate myself on-chain, execute tasks autonomously, and make x402 payments within your spending rules -- all gasless on Kite.\n\nTry asking me to:\n- "Show me your identity" (agent self-authentication)\n- "What can you do?" (list MCP capabilities)\n- "Get me premium research" (x402 payment flow)\n- "Check my spending rules" (scoped permissions)\n\nHow can I help you?`,
+        content: `Hello! I'm your ${name} Agent, powered by Kite Agent Passport.\n\nI can authenticate myself on-chain, execute tasks autonomously, and make x402 payments within your spending rules -- all gasless on Kite.\n\nTry asking me to:\n- "Show me your identity" (agent self-authentication)\n- "What can you do?" (list MCP capabilities)\n- "Get a swap quote for 1 ETH to USDC" (Uniswap live pricing)\n- "Swap 1000 USDC for ETH on Base" (cross-chain DeFi via Uniswap + x402)\n- "Get me premium research" (x402 payment flow)\n- "Check my spending rules" (scoped permissions)\n\nHow can I help you?`,
         timestamp: new Date(),
       },
     ]);
@@ -436,6 +487,8 @@ function ChatContent() {
           </p>
           <div className="flex items-center gap-2 text-xs text-gray-600">
             <span>x402</span>
+            <span>|</span>
+            <span>Uniswap</span>
             <span>|</span>
             <span>Gasless</span>
             <span>|</span>

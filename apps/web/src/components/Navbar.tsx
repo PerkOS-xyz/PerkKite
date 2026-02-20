@@ -18,6 +18,15 @@ export function Navbar() {
           <Link href="/dashboard" className="text-gray-400 hover:text-white transition">
             Dashboard
           </Link>
+          <Link href="/launch" className="text-gray-400 hover:text-white transition">
+            Launch
+          </Link>
+          <Link href="/teams" className="text-gray-400 hover:text-white transition">
+            Teams
+          </Link>
+          <Link href="/openclaw" className="text-gray-400 hover:text-white transition">
+            OpenClaw
+          </Link>
           <Link href="/marketplace" className="text-gray-400 hover:text-white transition">
             Marketplace
           </Link>
