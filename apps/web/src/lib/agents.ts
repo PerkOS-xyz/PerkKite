@@ -17,6 +17,7 @@ export interface Agent {
   name: string;
   clientId: string;
   mcpUrl: string;
+  mcpAccessToken?: string;
   walletAddress: string;
   knowledge: string[];
   createdAt: Timestamp | Date;
@@ -58,7 +59,19 @@ export async function revokeAgent(agentId: string): Promise<void> {
   });
 }
 
-export async function addKnowledgeToAgent(agentId: string, knowledgeId: string): Promise<void> {
-  // For now, we'll handle this client-side
-  // In production, use updateDoc with arrayUnion
+export async function updateAgentToken(agentId: string, mcpAccessToken: string): Promise<void> {
+  await updateDoc(doc(db, AGENTS_COLLECTION, agentId), {
+    mcpAccessToken,
+  });
+}
+
+export async function getAgentByClientId(walletAddress: string, clientId: string): Promise<Agent | null> {
+  const q = query(
+    collection(db, AGENTS_COLLECTION),
+    where('walletAddress', '==', walletAddress.toLowerCase()),
+    where('clientId', '==', clientId)
+  );
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Agent;
 }

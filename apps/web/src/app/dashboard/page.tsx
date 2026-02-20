@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
-import { getAgentsByWallet, addAgent, deleteAgent, revokeAgent, type Agent } from '@/lib/agents';
+import { useSearchParams } from 'next/navigation';
+import { getAgentsByWallet, addAgent, deleteAgent, revokeAgent, updateAgentToken, getAgentByClientId, type Agent } from '@/lib/agents';
 import { listTools } from '@/lib/mcp';
+
+const KITE_OAUTH_URL = 'https://neo.dev.gokite.ai/oauth/authorize';
+
+function getOAuthRedirectUri(): string {
+  const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  return `${base}/api/oauth/callback`;
+}
 
 interface AgentStatus {
   authenticated: boolean;
@@ -21,7 +29,16 @@ interface VaultInfo {
 }
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><div className="animate-spin text-4xl">🪁</div></div>}>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const { address, isConnected } = useAccount();
+  const searchParams = useSearchParams();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -30,7 +47,9 @@ export default function DashboardPage() {
     name: '',
     clientId: '',
     mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp',
+    mcpAccessToken: '',
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testError, setTestError] = useState('');
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({});
@@ -38,6 +57,51 @@ export default function DashboardPage() {
   const [showRulesModal, setShowRulesModal] = useState<string | null>(null);
   const [ruleForm, setRuleForm] = useState({ dailyBudget: '100', timeWindowHours: '24' });
   const [revokedAgents, setRevokedAgents] = useState<Set<string>>(new Set());
+  const [oauthMessage, setOauthMessage] = useState<string | null>(null);
+
+  // Handle OAuth callback — store access token with agent
+  useEffect(() => {
+    const oauthSuccess = searchParams.get('oauth_success');
+    const oauthError = searchParams.get('oauth_error');
+    const agentClientId = searchParams.get('agent_id');
+    const accessToken = searchParams.get('access_token');
+
+    if (oauthError) {
+      setOauthMessage(`MCP connection failed: ${oauthError}`);
+      // Clean URL
+      window.history.replaceState({}, '', '/dashboard');
+    } else if (oauthSuccess && agentClientId && accessToken && address) {
+      // Store the token with the agent in Firebase
+      (async () => {
+        try {
+          const agent = await getAgentByClientId(address, agentClientId);
+          if (agent?.id) {
+            await updateAgentToken(agent.id, accessToken);
+            setOauthMessage('MCP connected successfully! Agent is now authenticated.');
+            loadAgents();
+          } else {
+            setOauthMessage('Token received but agent not found. Try adding the agent first.');
+          }
+        } catch (err) {
+          setOauthMessage(`Failed to save token: ${String(err)}`);
+        }
+      })();
+      // Clean URL
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, [searchParams, address]);
+
+  // Start OAuth flow for an agent
+  const startOAuthFlow = (clientId: string) => {
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: getOAuthRedirectUri(),
+      scope: 'mcp.read mcp.write',
+      state: clientId, // pass agent ID through OAuth state
+    });
+    window.location.href = `${KITE_OAUTH_URL}?${params.toString()}`;
+  };
 
   useEffect(() => {
     if (address) {
@@ -62,7 +126,7 @@ export default function DashboardPage() {
       // Fetch auth status for each non-revoked agent
       data.forEach(agent => {
         if (!agent.revoked) {
-          fetchAgentStatus(agent.clientId);
+          fetchAgentStatus(agent.clientId, agent.mcpAccessToken);
         }
       });
     } catch (error) {
@@ -72,10 +136,12 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchAgentStatus = useCallback(async (clientId: string) => {
+  const fetchAgentStatus = useCallback(async (clientId: string, accessToken?: string) => {
     setAgentStatuses(prev => ({ ...prev, [clientId]: { authenticated: false, payerAddress: null, toolCount: 0, loading: true } }));
     try {
-      const res = await fetch(`/api/agent-info?agentId=${encodeURIComponent(clientId)}`);
+      const params = new URLSearchParams({ agentId: clientId });
+      if (accessToken) params.set('accessToken', accessToken);
+      const res = await fetch(`/api/agent-info?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setAgentStatuses(prev => ({
@@ -111,32 +177,57 @@ export default function DashboardPage() {
     setTestStatus('testing');
     setTestError('');
     try {
-      const tools = await listTools(newAgent.clientId);
-      console.log('MCP tools:', tools);
-      setTestStatus('success');
+      // Call agent-info endpoint which tests both identity and tools
+      const params = new URLSearchParams({ agentId: newAgent.clientId });
+      if (newAgent.mcpAccessToken) params.set('accessToken', newAgent.mcpAccessToken);
+      const res = await fetch(`/api/agent-info?${params.toString()}`);
+      const data = await res.json();
+      console.log('Agent info test response:', data);
+
+      if (!res.ok) {
+        setTestStatus('error');
+        setTestError(data.error || data.details || 'Connection failed');
+        return;
+      }
+
+      if (data.authenticated) {
+        setTestStatus('success');
+        setTestError('');
+      } else if (data.toolCount > 0) {
+        // Tools available but no payer address — partial connection
+        setTestStatus('success');
+        setTestError('');
+      } else {
+        setTestStatus('error');
+        setTestError('Connected to MCP but no tools or identity found. Check that your Client ID matches an active session in Kite Portal.');
+      }
     } catch (error) {
       setTestStatus('error');
-      setTestError(String(error));
+      setTestError(`Connection failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
   const handleAddAgent = async () => {
     if (!newAgent.name || !newAgent.clientId || !address) return;
     setSaving(true);
+    setTestError('');
     try {
       await addAgent({
         name: newAgent.name,
         clientId: newAgent.clientId,
         mcpUrl: newAgent.mcpUrl,
+        mcpAccessToken: newAgent.mcpAccessToken || undefined,
         walletAddress: address,
         knowledge: [],
         createdAt: new Date(),
       });
-      setNewAgent({ name: '', clientId: '', mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp' });
+      setNewAgent({ name: '', clientId: '', mcpUrl: 'https://neo.dev.gokite.ai/v1/mcp', mcpAccessToken: '' });
+      setShowAdvanced(false);
       setShowAddModal(false);
       await loadAgents();
     } catch (error) {
       console.error('Error adding agent:', error);
+      setTestError(`Failed to save agent: ${String(error).includes('projectId') ? 'Firebase not configured. Add NEXT_PUBLIC_FIREBASE_* variables to .env' : String(error)}`);
     } finally {
       setSaving(false);
     }
@@ -211,6 +302,18 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* OAuth Message */}
+      {oauthMessage && (
+        <div className={`p-4 rounded-lg border mb-4 ${
+          oauthMessage.includes('success') ? 'bg-green-900/20 border-green-800 text-green-400' : 'bg-red-900/20 border-red-800 text-red-400'
+        }`}>
+          <div className="flex items-center justify-between">
+            <p className="text-sm">{oauthMessage}</p>
+            <button onClick={() => setOauthMessage(null)} className="text-xs opacity-60 hover:opacity-100">Dismiss</button>
+          </div>
+        </div>
+      )}
+
       {/* Info Banner */}
       <div className="p-4 bg-gray-900 rounded-lg border border-gray-800 mb-8">
         <p className="text-sm text-gray-400">
@@ -218,7 +321,7 @@ export default function DashboardPage() {
           <a href="https://app.gokite.ai/" target="_blank" rel="noopener noreferrer" className="text-kite-primary hover:underline">
             Kite Portal
           </a>
-          , get your Client ID, add it here. Your agent authenticates via Kite Agent Passport and can make gasless x402 payments within your spending rules.
+          , get your Client ID, add it here. Then click <span className="text-kite-secondary">Connect MCP</span> to authenticate via OAuth.
         </p>
       </div>
 
@@ -280,7 +383,7 @@ export default function DashboardPage() {
                   <div className="flex gap-2">
                     {!isRevoked && (
                       <Link
-                        href={`/chat?agent=${agent.clientId}&template=${agent.knowledge?.[0] || 'default'}`}
+                        href={`/chat?agent=${agent.clientId}&template=${agent.knowledge?.[0] || 'default'}${agent.mcpAccessToken ? `&token=${encodeURIComponent(agent.mcpAccessToken)}` : ''}`}
                         className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition"
                       >
                         Chat
@@ -300,7 +403,9 @@ export default function DashboardPage() {
                   {/* Identity */}
                   <div className="p-3 bg-gray-800/50 rounded-lg">
                     <p className="text-xs text-gray-500 mb-1">Payer Address</p>
-                    {status?.payerAddress ? (
+                    {status?.loading ? (
+                      <p className="text-sm text-gray-600 animate-pulse">Checking...</p>
+                    ) : status?.payerAddress ? (
                       <a
                         href={`https://testnet.kitescan.ai/address/${status.payerAddress}`}
                         target="_blank"
@@ -318,10 +423,14 @@ export default function DashboardPage() {
                   <div className="p-3 bg-gray-800/50 rounded-lg">
                     <p className="text-xs text-gray-500 mb-1">MCP Capabilities</p>
                     <p className="text-sm">
-                      {status?.toolCount ? (
+                      {status?.loading ? (
+                        <span className="text-gray-600 animate-pulse">Checking...</span>
+                      ) : status?.toolCount ? (
                         <span className="text-white">{status.toolCount} tools available</span>
+                      ) : status ? (
+                        <span className="text-gray-600">No tools found</span>
                       ) : (
-                        <span className="text-gray-600">Checking...</span>
+                        <span className="text-gray-600">Not checked</span>
                       )}
                     </p>
                   </div>
@@ -367,6 +476,14 @@ export default function DashboardPage() {
 
                 {/* Actions row */}
                 <div className="flex items-center gap-2">
+                  {!isRevoked && !status?.authenticated && !status?.loading && (
+                    <button
+                      onClick={() => startOAuthFlow(agent.clientId)}
+                      className="px-3 py-1.5 bg-kite-primary/20 text-kite-secondary hover:bg-kite-primary/30 rounded text-xs font-medium transition"
+                    >
+                      Connect MCP
+                    </button>
+                  )}
                   {vault?.explorerUrl && (
                     <a
                       href={vault.explorerUrl}
@@ -418,14 +535,14 @@ export default function DashboardPage() {
                   value={newAgent.clientId}
                   onChange={e => setNewAgent({ ...newAgent, clientId: e.target.value })}
                   className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
-                  placeholder="client_agent_yCQRgvatvJD4sQWiVn7vmtjN"
+                  placeholder="client_agent_Madb9b96WDi04Z9RTxxQxQYy"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Find this in{' '}
+                  In{' '}
                   <a href="https://app.gokite.ai/" target="_blank" rel="noopener noreferrer" className="text-kite-secondary hover:underline">
                     Kite Portal
-                  </a>{' '}
-                  → Agents → MCP Config
+                  </a>
+                  {' '}→ Sessions → Click your session → Agent ID
                 </p>
                 <button
                   type="button"
@@ -439,20 +556,47 @@ export default function DashboardPage() {
                 {testStatus === 'error' && <p className="text-xs text-red-400 mt-1">{testError || 'Connection failed'}</p>}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">MCP URL</label>
-                <input
-                  type="text"
-                  value={newAgent.mcpUrl}
-                  onChange={e => setNewAgent({ ...newAgent, mcpUrl: e.target.value })}
-                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="text-xs text-gray-500 hover:text-gray-300 transition"
+              >
+                {showAdvanced ? 'Hide' : 'Show'} advanced options
+              </button>
+
+              {showAdvanced && (
+                <div className="space-y-4 pt-2 border-t border-gray-800">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">MCP Access Token <span className="text-gray-500 font-normal">(optional)</span></label>
+                    <input
+                      type="password"
+                      value={newAgent.mcpAccessToken}
+                      onChange={e => setNewAgent({ ...newAgent, mcpAccessToken: e.target.value })}
+                      className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
+                      placeholder="Only needed for production MCP"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">MCP URL <span className="text-gray-500 font-normal">(optional)</span></label>
+                    <input
+                      type="text"
+                      value={newAgent.mcpUrl}
+                      onChange={e => setNewAgent({ ...newAgent, mcpUrl: e.target.value })}
+                      className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-kite-primary outline-none font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
+
+            {testError && testStatus !== 'error' && (
+              <p className="text-sm text-red-400 mt-2">{testError}</p>
+            )}
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => { setShowAddModal(false); setTestStatus('idle'); setTestError(''); }}
+                onClick={() => { setShowAddModal(false); setTestStatus('idle'); setTestError(''); setShowAdvanced(false); }}
                 className="flex-1 px-4 py-3 border border-gray-700 hover:border-gray-500 rounded-lg font-medium transition"
               >
                 Cancel

@@ -216,6 +216,7 @@ function ChatContent() {
   const searchParams = useSearchParams();
   const template = searchParams.get('template') || 'default';
   const agentIdParam = searchParams.get('agent') || null;
+  const accessToken = searchParams.get('token') || null;
   const { isConnected, address } = useAccount();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -237,11 +238,11 @@ function ChatContent() {
 
   // Fetch agent info on mount
   const fetchAgentInfo = useCallback(async () => {
-    const id = agentId || process.env.NEXT_PUBLIC_KITE_CLIENT_ID;
-    if (!id) return;
-    setAgentId(id);
+    if (!agentId) return;
     try {
-      const res = await fetch(`/api/agent-info?agentId=${encodeURIComponent(id)}`);
+      const params = new URLSearchParams({ agentId });
+      if (accessToken) params.set('accessToken', accessToken);
+      const res = await fetch(`/api/agent-info?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setAgentInfo(data);
@@ -249,14 +250,22 @@ function ChatContent() {
     } catch {
       // Agent info fetch is non-critical
     }
-  }, [agentId]);
+  }, [agentId, accessToken]);
 
   useEffect(() => {
     fetchAgentInfo();
   }, [fetchAgentInfo]);
 
+  // Redirect to Dashboard if no agent selected
+  useEffect(() => {
+    if (!agentIdParam) {
+      router.replace('/dashboard');
+    }
+  }, [agentIdParam, router]);
+
   // Welcome message
   useEffect(() => {
+    if (!agentIdParam) return;
     const name = templateConfig.name;
     setMessages([
       {
@@ -266,7 +275,7 @@ function ChatContent() {
         timestamp: new Date(),
       },
     ]);
-  }, [templateConfig.name]);
+  }, [templateConfig.name, agentIdParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -296,7 +305,8 @@ function ChatContent() {
         body: JSON.stringify({
           messages: chatMessages,
           systemPrompt: templateConfig.systemPrompt,
-          agentId: agentId || process.env.NEXT_PUBLIC_KITE_CLIENT_ID || undefined,
+          agentId: agentId || undefined,
+          accessToken: accessToken || undefined,
         }),
       });
 

@@ -64,8 +64,8 @@ export default function Home() {
 
   const handleTemplateClick = (templateId: string, category: string) => {
     if (isConnected) {
-      // Go directly to chat with template
-      router.push(`/chat?template=${templateId}`);
+      // Go to Dashboard — user must select/add an agent before chatting
+      router.push(`/dashboard?template=${templateId}`);
     } else {
       // Store selection and open connect modal
       localStorage.setItem('pendingTemplate', JSON.stringify({ templateId, category }));
@@ -80,7 +80,7 @@ export default function Home() {
       if (pending) {
         const { templateId } = JSON.parse(pending);
         localStorage.removeItem('pendingTemplate');
-        router.push(`/chat?template=${templateId}`);
+        router.push(`/dashboard?template=${templateId}`);
       }
     }
   }, [isConnected, router]);

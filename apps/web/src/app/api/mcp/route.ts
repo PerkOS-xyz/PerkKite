@@ -2,17 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const DEV_MCP_URL = 'https://neo.dev.gokite.ai/v1/mcp';
 
-function getMCPConfig(agentId: string): { url: string; headers: Record<string, string> } {
+function getMCPConfig(agentId: string, accessToken?: string): { url: string; headers: Record<string, string> } {
   const apiKey = process.env.KITE_API_KEY;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
   if (apiKey) {
     return {
       url: `https://mcp.prod.gokite.ai/${apiKey}/mcp`,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
     };
   }
+
+  // OAuth Bearer token from Kite Portal
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+  headers['X-Agent-Id'] = agentId;
+
   return {
     url: process.env.KITE_MCP_URL || DEV_MCP_URL,
-    headers: { 'Content-Type': 'application/json', 'X-Agent-Id': agentId },
+    headers,
   };
 }
 
@@ -20,13 +29,13 @@ function getMCPConfig(agentId: string): { url: string; headers: Record<string, s
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { agentId, method, params } = body;
+    const { agentId, accessToken, method, params } = body;
 
     if (!agentId) {
       return NextResponse.json({ error: 'Missing agentId' }, { status: 400 });
     }
 
-    const { url, headers } = getMCPConfig(agentId);
+    const { url, headers } = getMCPConfig(agentId, accessToken);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -53,12 +62,13 @@ export async function POST(request: NextRequest) {
 // Get available MCP tools
 export async function GET(request: NextRequest) {
   const agentId = request.nextUrl.searchParams.get('agentId');
+  const accessToken = request.nextUrl.searchParams.get('accessToken') || undefined;
 
   if (!agentId) {
     return NextResponse.json({ error: 'Missing agentId query param' }, { status: 400 });
   }
 
-  const { url, headers } = getMCPConfig(agentId);
+  const { url, headers } = getMCPConfig(agentId, accessToken);
 
   try {
     const response = await fetch(url, {

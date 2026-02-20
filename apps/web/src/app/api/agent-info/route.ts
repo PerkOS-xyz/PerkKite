@@ -3,6 +3,7 @@ import { getPayerAddress, listMCPTools } from '@/lib/mcp-server';
 
 export async function GET(request: NextRequest) {
   const agentId = request.nextUrl.searchParams.get('agentId');
+  const accessToken = request.nextUrl.searchParams.get('accessToken') || undefined;
 
   if (!agentId) {
     return NextResponse.json({ error: 'Missing agentId' }, { status: 400 });
@@ -10,8 +11,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const [payerAddress, tools] = await Promise.allSettled([
-      getPayerAddress(agentId),
-      listMCPTools(agentId),
+      getPayerAddress(agentId, accessToken),
+      listMCPTools(agentId, accessToken),
     ]);
 
     const address = payerAddress.status === 'fulfilled' ? payerAddress.value : null;

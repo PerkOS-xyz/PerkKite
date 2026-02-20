@@ -11,12 +11,16 @@ function getMCPUrl(): string {
   return process.env.KITE_MCP_URL || DEV_MCP_URL;
 }
 
-function getMCPHeaders(agentId?: string): Record<string, string> {
+function getMCPHeaders(agentId?: string, accessToken?: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  // Dev endpoint uses X-Agent-Id header; prod endpoint uses API key in URL
-  if (!process.env.KITE_API_KEY && agentId) {
+  // OAuth Bearer token (from Kite Portal MCP Config)
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+  // Dev endpoint also accepts X-Agent-Id header as fallback
+  if (agentId) {
     headers['X-Agent-Id'] = agentId;
   }
   return headers;
@@ -38,12 +42,13 @@ interface MCPResponse<T = unknown> {
 export async function callMCPTool(
   agentId: string,
   toolName: string,
-  args: Record<string, unknown> = {}
+  args: Record<string, unknown> = {},
+  accessToken?: string
 ): Promise<unknown> {
   const url = getMCPUrl();
   const response = await fetch(url, {
     method: 'POST',
-    headers: getMCPHeaders(agentId),
+    headers: getMCPHeaders(agentId, accessToken),
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: Date.now(),
@@ -53,21 +58,33 @@ export async function callMCPTool(
   });
 
   if (!response.ok) {
-    throw new Error(`MCP request failed: ${response.status} ${response.statusText}`);
+    const text = await response.text().catch(() => '');
+    throw new Error(`MCP request failed: ${response.status} ${text || response.statusText}`);
   }
 
   const data: MCPResponse = await response.json();
   if (data.error) {
     throw new Error(`MCP error: ${data.error.message}`);
   }
+
+  // MCP standard tools/call wraps results in { content: [{type:'text', text:'...'}] }
+  // Unwrap to return the actual parsed content for callers
+  const result = data.result as { content?: Array<{ type: string; text: string }> } | undefined;
+  if (result?.content?.[0]?.text) {
+    try {
+      return JSON.parse(result.content[0].text);
+    } catch {
+      return result.content[0].text;
+    }
+  }
   return data.result;
 }
 
-export async function listMCPTools(agentId: string): Promise<MCPTool[]> {
+export async function listMCPTools(agentId: string, accessToken?: string): Promise<MCPTool[]> {
   const url = getMCPUrl();
   const response = await fetch(url, {
     method: 'POST',
-    headers: getMCPHeaders(agentId),
+    headers: getMCPHeaders(agentId, accessToken),
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: Date.now(),
@@ -77,29 +94,52 @@ export async function listMCPTools(agentId: string): Promise<MCPTool[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`MCP tools list failed: ${response.status}`);
+    const text = await response.text().catch(() => '');
+    throw new Error(`MCP tools list failed: ${response.status} ${text || response.statusText}`);
   }
 
   const data: MCPResponse<{ tools: MCPTool[] }> = await response.json();
   if (data.error) {
+    console.log('MCP tools/list error:', data.error.message);
     throw new Error(`MCP error: ${data.error.message}`);
   }
-  return data.result?.tools || [];
+  const tools = data.result?.tools || [];
+  if (tools.length === 0) {
+    console.log('MCP tools/list raw result:', JSON.stringify(data.result));
+  }
+  return tools;
 }
 
-export async function getPayerAddress(agentId: string): Promise<string | null> {
+export async function getPayerAddress(agentId: string, accessToken?: string): Promise<string | null> {
   try {
-    const result = await callMCPTool(agentId, 'get_payer_addr', {});
-    return (result as { address?: string })?.address || null;
-  } catch {
+    const raw = await callMCPTool(agentId, 'get_payer_addr', {}, accessToken);
+    // If result is a string directly (e.g. just the address)
+    if (typeof raw === 'string' && raw.startsWith('0x')) return raw;
+    // Handle various response shapes: docs say { payer_addr: "0x..." }
+    const result = raw as Record<string, unknown>;
+    const addr = result?.payer_addr || result?.address || result?.payerAddress || result?.payer_address;
+    if (typeof addr === 'string' && addr.startsWith('0x')) return addr;
+    console.log('get_payer_addr result:', JSON.stringify(raw));
+    return null;
+  } catch (err) {
+    console.log('get_payer_addr error:', String(err));
     return null;
   }
 }
 
 export async function approvePayment(
   agentId: string,
+  payerAddr: string,
+  payeeAddr: string,
   amount: string,
-  recipient: string
+  tokenType: string = 'USDC',
+  accessToken?: string
 ): Promise<unknown> {
-  return callMCPTool(agentId, 'approve_payment', { amount, recipient });
+  // Kite docs: approve_payment({ payer_addr, payee_addr, amount, token_type })
+  return callMCPTool(agentId, 'approve_payment', {
+    payer_addr: payerAddr,
+    payee_addr: payeeAddr,
+    amount,
+    token_type: tokenType,
+  }, accessToken);
 }

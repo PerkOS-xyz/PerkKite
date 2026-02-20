@@ -67,7 +67,7 @@ User (Wallet) --> PerkKite (Templates + Chat) --> Kite Passport (Identity + Rule
 sequenceDiagram
     participant U as User
     participant P as PerkKite
-    participant AI as OpenAI (GPT-4o-mini)
+    participant AI as OpenAI (GPT-5-mini)
     participant MCP as Kite MCP
     participant X as x402 Service
     participant F as Facilitator
@@ -93,7 +93,7 @@ sequenceDiagram
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 15, React 19, Tailwind CSS, RainbowKit |
-| AI | OpenAI GPT-4o-mini with function calling (agentic loop) |
+| AI | OpenAI GPT-5-mini with function calling (agentic loop) |
 | Identity | Kite Agent Passport via MCP (Model Context Protocol) |
 | Payments | x402 protocol, Pieverse facilitator, USDC settlement |
 | Chain | Kite Testnet (Chain ID: 2368), gasless AA wallets |

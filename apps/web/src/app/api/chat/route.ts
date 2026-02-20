@@ -98,13 +98,14 @@ interface ActionLog {
 async function executeTool(
   toolName: string,
   args: Record<string, unknown>,
-  agentId: string
+  agentId: string,
+  accessToken?: string
 ): Promise<{ result: unknown; action: ActionLog }> {
   const timestamp = new Date().toISOString();
 
   switch (toolName) {
     case 'get_agent_identity': {
-      const payerAddress = await getPayerAddress(agentId);
+      const payerAddress = await getPayerAddress(agentId, accessToken);
       const result = {
         agentId,
         payerAddress: payerAddress || 'Not available (agent not registered on Kite)',
@@ -117,7 +118,7 @@ async function executeTool(
     }
 
     case 'list_agent_capabilities': {
-      const tools = await listMCPTools(agentId);
+      const tools = await listMCPTools(agentId, accessToken);
       const result = {
         tools: tools.map(t => ({ name: t.name, description: t.description })),
         count: tools.length,
@@ -132,7 +133,7 @@ async function executeTool(
       let mcpResult: unknown;
       let mcpError: string | null = null;
       try {
-        mcpResult = await callMCPTool(agentId, 'approve_payment', { amount, recipient });
+        mcpResult = await callMCPTool(agentId, 'approve_payment', { amount, recipient }, accessToken);
       } catch (error) {
         mcpError = String(error);
       }
@@ -297,7 +298,7 @@ async function executeTool(
         const mcpResult = await callMCPTool(agentId, 'approve_payment', {
           amount: amountHuman,
           recipient: payTo,
-        });
+        }, accessToken);
         txHash = (mcpResult as { txHash?: string })?.txHash;
       } catch (error) {
         paymentError = String(error);
@@ -391,7 +392,7 @@ async function executeTool(
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages, systemPrompt, agentId } = await request.json();
+    const { messages, systemPrompt, agentId, accessToken } = await request.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Missing or invalid messages array' }, { status: 400 });
@@ -430,11 +431,11 @@ Agent ID: ${agentId || 'not configured'}`;
     // Agent loop: keep calling until no more tool calls (max 5 iterations)
     for (let i = 0; i < 5; i++) {
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-mini',
         messages: chatMessages,
         tools: agentId ? AGENT_TOOLS : undefined,
         tool_choice: agentId ? 'auto' : undefined,
-        max_tokens: 1024,
+        max_completion_tokens: 1024,
       });
 
       const choice = completion.choices[0];
@@ -461,7 +462,7 @@ Agent ID: ${agentId || 'not configured'}`;
           fnArgs = {};
         }
 
-        const { result, action } = await executeTool(fnName, fnArgs, agentId || '');
+        const { result, action } = await executeTool(fnName, fnArgs, agentId || '', accessToken);
         allActions.push(action);
 
         chatMessages.push({
@@ -474,7 +475,7 @@ Agent ID: ${agentId || 'not configured'}`;
 
     // If we exhausted the loop, get a final response
     const finalCompletion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-mini',
       messages: chatMessages,
       max_tokens: 1024,
     });
